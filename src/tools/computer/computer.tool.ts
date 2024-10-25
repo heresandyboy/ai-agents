@@ -39,17 +39,24 @@ class ComputerToolImplementation {
   private typingGroupSize = 50;
 
   constructor() {
+    // Get display dimensions from env
     this.width = parseInt(process.env.WIDTH || "0", 10);
     this.height = parseInt(process.env.HEIGHT || "0", 10);
 
+    // Validate dimensions
     if (!this.width || !this.height) {
       throw new Error("WIDTH and HEIGHT environment variables must be set");
     }
+    console.log(
+      `📐 Configured display dimensions: ${this.width}x${this.height}`
+    );
 
+    // Set up display
     const displayNum = process.env.DISPLAY_NUM;
     this.displayNum = displayNum ? parseInt(displayNum, 10) : null;
     this.displayPrefix =
       this.displayNum !== null ? `DISPLAY=:${this.displayNum} ` : "";
+    console.log(`🖥️ Using display: ${this.displayPrefix || "default"}`);
 
     this.isWindows = os.platform() === "win32";
   }
@@ -58,12 +65,14 @@ class ComputerToolImplementation {
   async execute(
     command: ComputerCommand
   ): Promise<{ result: string; base64Image?: string }> {
+    console.log("\n🖥️ ComputerTool: Executing command", command);
     const { action, text, coordinate } = command;
 
-    // Validate parameters based on action
+    console.log("🔍 Validating parameters...");
     this.validateParameters(action, text, coordinate);
 
     try {
+      console.log(`⚡ Executing action: ${action}`);
       switch (action) {
         case "key":
           return await this.handleKeyAction(text!);
@@ -99,6 +108,7 @@ class ComputerToolImplementation {
           throw new Error(`Unsupported action: ${action}`);
       }
     } catch (error) {
+      console.error(`❌ Failed to execute ${action}:`, error);
       throw new Error(`Failed to execute ${action}: ${error}`);
     }
   }
@@ -181,12 +191,29 @@ class ComputerToolImplementation {
   private async handleMouseMoveAction(
     coordinate: [number, number]
   ): Promise<{ result: string; base64Image?: string }> {
+    console.log(`🖱️ Moving mouse to coordinates: ${coordinate}`);
+
     const [x, y] = this.scaleCoordinates(
       ScalingSource.API,
       coordinate[0],
       coordinate[1]
     );
-    await this.executeShellCommand(this.getMouseMoveCommand(x, y));
+
+    console.log(`📏 Scaled coordinates: ${x}, ${y}`);
+
+    if (this.isWindows) {
+      const command = `powershell -command "
+        Add-Type -AssemblyName System.Windows.Forms
+        [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(${x},${y})
+        $pos = [System.Windows.Forms.Cursor]::Position
+        Write-Output \"Actual position: $($pos.X),$($pos.Y)\"
+      "`;
+
+      await this.executeShellCommand(command);
+    } else {
+      await this.executeShellCommand(this.getMouseMoveCommand(x, y));
+    }
+
     const base64Image = await this.takeScreenshotWithDelay();
     return { result: `Moved mouse to coordinates (${x}, ${y})`, base64Image };
   }
@@ -194,10 +221,43 @@ class ComputerToolImplementation {
   // Handle mouse click actions
   private async handleMouseClickAction(
     button: "left" | "right" | "middle"
-  ): Promise<{ result: string; base64Image?: string }> {
-    await this.executeShellCommand(this.getMouseClickCommand(button));
-    const base64Image = await this.takeScreenshotWithDelay();
-    return { result: `Performed ${button} click`, base64Image };
+  ): Promise<{ result: string }> {
+    console.log(`🖱️ Executing ${button} click`);
+
+    if (this.isWindows) {
+      const buttonMap = {
+        left: "mouse_event(0x2 | 0x4, 0, 0, 0, 0)", // MOUSEEVENTF_LEFTDOWN | MOUSEEVENTF_LEFTUP
+        right: "mouse_event(0x8 | 0x10, 0, 0, 0, 0)", // MOUSEEVENTF_RIGHTDOWN | MOUSEEVENTF_RIGHTUP
+        middle: "mouse_event(0x20 | 0x40, 0, 0, 0, 0)", // MOUSEEVENTF_MIDDLEDOWN | MOUSEEVENTF_MIDDLEUP
+      };
+
+      const command = `powershell -command "
+        Add-Type -TypeDefinition @'
+        using System;
+        using System.Runtime.InteropServices;
+        public class MouseOperations {
+          [DllImport(\"user32.dll\")]
+          public static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, int dwExtraInfo);
+        }
+      '@
+        [MouseOperations]::${buttonMap[button]}
+      "`;
+
+      await this.executeShellCommand(command);
+      return { result: `Performed ${button} click` };
+    } else {
+      // Linux/Mac implementation using displayPrefix directly
+      const clickArg = {
+        left: "1",
+        right: "3",
+        middle: "2",
+      }[button];
+
+      await this.executeShellCommand(
+        `${this.displayPrefix}xdotool click ${clickArg}`
+      );
+      return { result: `Performed ${button} click` };
+    }
   }
 
   // Handle 'double_click' action
@@ -255,39 +315,58 @@ class ComputerToolImplementation {
 
   // Take a screenshot and return base64 encoded image
   private async takeScreenshot(): Promise<string> {
+    console.log("📸 Taking screenshot...");
     const outputDir = path.join(os.tmpdir(), "outputs");
     const filename = `screenshot_${Date.now()}.png`;
     const filepath = path.join(outputDir, filename);
 
     try {
       await fs.mkdir(outputDir, { recursive: true });
+      console.log("📁 Created output directory:", outputDir);
 
       const screenshotCommand = this.getScreenshotCommand(filepath);
-      await execAsync(screenshotCommand);
+      console.log("📷 Executing screenshot command:", screenshotCommand);
+
+      const { stdout, stderr } = await execAsync(screenshotCommand);
+      if (stderr) {
+        console.error("⚠️ Screenshot command stderr:", stderr);
+      }
+
+      // Verify the file exists before proceeding
+      await fs.access(filepath);
+      console.log("✅ Screenshot file created successfully");
 
       if (this.scalingEnabled) {
+        console.log("🔄 Scaling screenshot...");
         const [x, y] = this.scaleCoordinates(
           ScalingSource.COMPUTER,
           this.width,
           this.height
         );
 
-        // Use 'magick' instead of 'convert' on Windows
         const resizeCommand = this.isWindows
           ? `magick "${filepath}" -resize ${x}x${y}! "${filepath}"`
           : `convert "${filepath}" -resize ${x}x${y}! "${filepath}"`;
 
+        console.log("🖼️ Resizing image:", resizeCommand);
         await execAsync(resizeCommand);
       }
 
       const imageBuffer = await fs.readFile(filepath);
+      console.log("✅ Screenshot taken and processed successfully");
       return imageBuffer.toString("base64");
     } catch (error) {
+      console.error("❌ Failed to take screenshot:", error);
       throw new Error(`Failed to take screenshot: ${error}`);
     } finally {
       try {
-        await fs.unlink(filepath);
-      } catch {
+        // await fs.unlink(filepath);
+        console.log("🗑️ Cleaned up temporary screenshot file");
+      } catch (error) {
+        console.error(
+          "❌ Failed to clean up temporary screenshot file:",
+          error
+        );
         // Ignore cleanup errors
       }
     }
@@ -295,7 +374,14 @@ class ComputerToolImplementation {
 
   // Execute a shell command
   private async executeShellCommand(command: string): Promise<void> {
-    await execAsync(command);
+    console.log("🔧 Executing shell command:", command);
+    try {
+      await execAsync(command);
+      console.log("✅ Shell command completed successfully");
+    } catch (error) {
+      console.error("❌ Shell command failed:", error);
+      throw error;
+    }
   }
 
   // Scale coordinates based on scaling settings
@@ -462,18 +548,42 @@ class ComputerToolImplementation {
   // Build command for 'screenshot' action
   private getScreenshotCommand(filepath: string): string {
     if (this.isWindows) {
-      return `powershell -command "Add-Type -AssemblyName System.Drawing; Add-Type -AssemblyName System.Windows.Forms; $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $bitmap = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height); $graphics = [System.Drawing.Graphics]::FromImage($bitmap); $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size); $bitmap.Save('${filepath}');"`;
+      // Updated Windows screenshot command with better error handling and file path escaping
+      return `powershell -command "
+        Add-Type -AssemblyName System.Windows.Forms
+        Add-Type -AssemblyName System.Drawing
+        
+        try {
+          $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bitmap = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height)
+          $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+          
+          $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+          $bitmap.Save('${filepath.replace(/\\/g, "\\\\")}')
+          
+          $graphics.Dispose()
+          $bitmap.Dispose()
+          
+          Write-Output 'Screenshot saved successfully'
+        } catch {
+          Write-Error $_.Exception.Message
+          exit 1
+        }
+      "`;
     } else {
-      // Try gnome-screenshot first
-      const gnomeScreenshotAvailable = !!execSync(
-        "command -v gnome-screenshot",
-        { encoding: "utf8" }
-      ).trim();
-      if (gnomeScreenshotAvailable) {
-        return `${this.displayPrefix}gnome-screenshot -f ${filepath} -p`;
-      } else {
-        // Fall back to scrot
-        return `${this.displayPrefix}scrot -p ${filepath}`;
+      // Linux implementation remains the same
+      try {
+        if (execSync("command -v maim", { encoding: "utf8" }).trim()) {
+          return `${this.displayPrefix}maim -g ${this.width}x${this.height}+0+0 "${filepath}"`;
+        } else if (
+          execSync("command -v gnome-screenshot", { encoding: "utf8" }).trim()
+        ) {
+          return `${this.displayPrefix}gnome-screenshot -f "${filepath}"`;
+        } else {
+          return `${this.displayPrefix}scrot -a 0,0,${this.width},${this.height} "${filepath}"`;
+        }
+      } catch {
+        return `${this.displayPrefix}scrot -a 0,0,${this.width},${this.height} "${filepath}"`;
       }
     }
   }

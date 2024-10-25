@@ -17,20 +17,19 @@ export class AIHandler {
   }
 
   async handleRequest(content: string, context: Context = {}) {
-    // const trace = this.langfuse.trace({ name: "User Request Trace" });
+    console.log("\n🔄 AIHandler: Processing request");
+    console.log("📨 Content:", content);
+    console.log("🔍 Context:", context);
 
     try {
+      console.log("🧭 Getting routing decision...");
       const routingDecision = await this.router.getRoutingDecision(
         content,
         context
       );
 
-      //   trace.event({
-      //     name: "Routing Decision",
-      //     metadata: routingDecision,
-      //   });
-
-      console.log(`Routing Reasoning: ${routingDecision.reasoning}`);
+      console.log("🎯 Routing Decision:", routingDecision);
+      console.log(`💭 Routing Reasoning: ${routingDecision.reasoning}`);
 
       const agent = this.agentManager.getAgent(
         routingDecision.selectedAgentName
@@ -42,13 +41,18 @@ export class AIHandler {
         );
       }
 
+      console.log(`🤖 Executing agent: ${agent.name}`);
       const agentResponse = await agent.handleRequest(content, context);
 
       if (agentResponse.updatedContext) {
+        console.log("📝 Updating context:", agentResponse.updatedContext);
         context = { ...context, ...agentResponse.updatedContext };
       }
 
       if (agentResponse.handoffAgentName) {
+        console.log(
+          `🔄 Handing off to agent: ${agentResponse.handoffAgentName}`
+        );
         const handoffAgent = this.agentManager.getAgent(
           agentResponse.handoffAgentName
         );
@@ -59,22 +63,12 @@ export class AIHandler {
           );
         }
 
-        // trace.event({
-        //   name: "Agent Handoff",
-        //   metadata: { from: agent.name, to: handoffAgent.name },
-        // });
-
         return await handoffAgent.handleRequest(content, context);
       }
 
-      //   trace.end({
-      //     metadata: { response: agentResponse },
-      //   });
-
       return agentResponse;
     } catch (error) {
-      console.error("Error in AIHandler handleRequest:", error);
-      //   trace.error({ message: error.message });
+      console.error("❌ Error in AIHandler handleRequest:", error);
       throw error;
     }
   }

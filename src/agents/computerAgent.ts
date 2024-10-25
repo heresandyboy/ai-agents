@@ -5,6 +5,7 @@ import { CoreTool, generateText, GenerateTextResult } from "ai";
 import { computerTool } from "../tools/computer/computer.tool";
 import { editorTool } from "../tools/editor/editor.tool";
 import { bashTool } from "../tools/bash/bash.tool";
+import { safeStringify } from "../utils/logging";
 
 type ComputerTools = {
   computer: typeof computerTool;
@@ -38,15 +39,17 @@ export class ComputerAgent extends BaseAgent<ComputerTools> {
     });
   }
 
-  async handleRequest(
-    content: string,
-    context: Context
-  ): Promise<GenerateTextResult<ComputerTools>> {
+  async handleRequest(content: string, context: Context) {
+    console.log("\n🤖 ComputerAgent: Processing request");
+    console.log("📝 Content:", content);
+    console.log("🔍 Context:", safeStringify(context));
+
     if (!this.portkey) {
       throw new Error("Portkey client not initialized");
     }
 
     try {
+      console.log("🔄 Generating text with AI model...");
       const result = await generateText({
         model: this.portkey.chatModel(""),
         messages: [{ role: "user", content }],
@@ -55,12 +58,22 @@ export class ComputerAgent extends BaseAgent<ComputerTools> {
           editor: editorTool,
           bash: bashTool,
         },
-        // max_tokens: 1000,
       });
+
+      console.log("✅ AI generation completed");
+      console.log("📊 Result details:");
+      console.log("- Text:", result.text);
+      console.log("- Tool Calls:", safeStringify(result.toolCalls));
+      console.log("- Tool Results:", safeStringify(result.toolResults));
+      console.log("- Usage:", safeStringify(result.usage));
+      console.log(
+        "- Response Messages:",
+        safeStringify(result.responseMessages)
+      );
 
       return result;
     } catch (error) {
-      console.error("Error in ComputerAgent handleRequest:", error);
+      console.error("❌ Error in ComputerAgent handleRequest:", error);
       throw error;
     }
   }
