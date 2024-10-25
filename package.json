@@ -1,0 +1,25 @@
+{
+  "name": "ai-agents",
+  "version": "1.0.0",
+  "main": "index.js",
+  "keywords": [],
+  "author": "Andy Ainsworth",
+  "license": "ISC",
+  "description": "",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "gateway": "npx @portkey-ai/gateway"
+  },
+  "dependencies": {
+    "@portkey-ai/vercel-provider": "^1.0.1",
+    "langfuse": "^3.28.0",
+    "lru-cache": "^11.0.1",
+    "portkey-ai": "^1.5.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.8.0",
+    "typescript": "^5.6.3"
+  }
+}
