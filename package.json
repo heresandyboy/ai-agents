@@ -10,7 +10,8 @@
     "build": "tsc",
     "start": "npm run build && node dist/index.js",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "gateway": "npx @portkey-ai/gateway"
+    "gateway": "npx @portkey-ai/gateway",
+    "deps-windows": "choco install imagemagick"
   },
   "dependencies": {
     "@portkey-ai/vercel-provider": "^1.0.1",
