@@ -1,0 +1,7 @@
+services:
+  portkey-gateway:
+    container_name: portkey-gateway
+    ports:
+      - "8787:8787"
+    image: "portkeyai/gateway:latest"
+    restart: always

@@ -1,6 +1,7 @@
 import { BaseAgent } from "./baseAgent";
 import { AgentResponse, Context } from "../agent";
-import { createPortkey } from "@portkey-ai/gateway";
+import { createPortkey } from "@portkey-ai/vercel-provider";
+import { CoreTool, generateText, GenerateTextResult } from "ai";
 
 export class LocalAgent extends BaseAgent {
   private portkey;
@@ -11,34 +12,37 @@ export class LocalAgent extends BaseAgent {
       "creative writing",
       "analysis",
     ]);
-    this.portkey = createPortkey({
-      apiKey: "YOUR_PORTKEY_API_KEY",
-      config: {
-        provider: "ollama",
-        customHost: "http://localhost:11434",
-        override_params: { model: "llama2" },
+
+    const portkeyConfig = {
+      provider: "ollama",
+      customHost: process.env.OLLAMA_HOST || "http://localhost:11434",
+      override_params: {
+        model: "llama2",
+        temperature: 0.7,
+        stream: true,
       },
+    };
+
+    this.portkey = createPortkey({
+      config: portkeyConfig,
     });
   }
 
-  async handleRequest(
-    content: string,
-    context: Context
-  ): Promise<AgentResponse> {
-    if (content.toLowerCase().includes("execute a code")) {
-      return {
-        response: "",
-        handoffAgentName: "computer-agent",
-        reasoning: "The request involves code execution.",
-      };
+  async handleRequest(content: string, context: Context) {
+    if (!this.portkey) {
+      throw new Error("Portkey client not initialized");
     }
 
-    const response = await this.portkey.chat.completions.create({
-      messages: [{ role: "user", content }],
-    });
+    try {
+      const result = await generateText({
+        model: this.portkey.chatModel("llama2"),
+        messages: [{ role: "user", content }],
+      });
 
-    return {
-      response: response.choices[0].message.content,
-    };
+      return result;
+    } catch (error) {
+      console.error("Error in LocalAgent handleRequest:", error);
+      throw error;
+    }
   }
 }

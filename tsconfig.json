@@ -5,7 +5,9 @@
       "rootDir": "./src",
       "outDir": "./dist",
       "strict": true,
-      "esModuleInterop": true
+      "esModuleInterop": true,
+      "jsx": "react",
+      "skipLibCheck": true
     },
     "exclude": ["node_modules", "dist"]
-  }
+}

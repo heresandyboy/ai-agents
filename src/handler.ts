@@ -1,23 +1,23 @@
 import { AgentManager } from "./agentManager";
 import { Router } from "./router";
 import { Context } from "./agent";
-import { Langfuse } from "langfuse";
+// import { Langfuse } from "langfuse";
 
 export class AIHandler {
   private agentManager: AgentManager;
   private router: Router;
-  private langfuse = new Langfuse({
-    publicKey: "YOUR_LANGFUSE_PUBLIC_KEY",
-    secretKey: "YOUR_LANGFUSE_SECRET_KEY",
-  });
+  //   private langfuse = new Langfuse({
+  //     publicKey: "YOUR_LANGFUSE_PUBLIC_KEY",
+  //     secretKey: "YOUR_LANGFUSE_SECRET_KEY",
+  //   });
 
   constructor(agentManager: AgentManager) {
     this.agentManager = agentManager;
     this.router = new Router(this.agentManager.getAllAgents());
   }
 
-  async handleRequest(content: string, context: Context = {}): Promise<string> {
-    const trace = this.langfuse.trace({ name: "User Request Trace" });
+  async handleRequest(content: string, context: Context = {}) {
+    // const trace = this.langfuse.trace({ name: "User Request Trace" });
 
     try {
       const routingDecision = await this.router.getRoutingDecision(
@@ -25,10 +25,10 @@ export class AIHandler {
         context
       );
 
-      trace.event({
-        name: "Routing Decision",
-        metadata: routingDecision,
-      });
+      //   trace.event({
+      //     name: "Routing Decision",
+      //     metadata: routingDecision,
+      //   });
 
       console.log(`Routing Reasoning: ${routingDecision.reasoning}`);
 
@@ -59,23 +59,22 @@ export class AIHandler {
           );
         }
 
-        trace.event({
-          name: "Agent Handoff",
-          metadata: { from: agent.name, to: handoffAgent.name },
-        });
+        // trace.event({
+        //   name: "Agent Handoff",
+        //   metadata: { from: agent.name, to: handoffAgent.name },
+        // });
 
-        return await handoffAgent
-          .handleRequest(content, context)
-          .then((res) => res.response);
+        return await handoffAgent.handleRequest(content, context);
       }
 
-      trace.end({
-        metadata: { response: agentResponse.response },
-      });
+      //   trace.end({
+      //     metadata: { response: agentResponse },
+      //   });
 
-      return agentResponse.response;
+      return agentResponse;
     } catch (error) {
-      trace.error({ message: error.message });
+      console.error("Error in AIHandler handleRequest:", error);
+      //   trace.error({ message: error.message });
       throw error;
     }
   }

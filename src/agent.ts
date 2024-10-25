@@ -1,12 +1,18 @@
+import { Message } from "ai";
+
 export interface Context {
   [key: string]: any;
 }
 
 export interface AgentResponse {
-  response: string;
+  text: string;
+  toolCalls?: any[];
+  toolResults?: any[];
+  metadata?: any;
   handoffAgentName?: string;
   updatedContext?: Partial<Context>;
   reasoning?: string;
+  messages?: Message[];
 }
 
 export interface Agent {
@@ -14,4 +20,3 @@ export interface Agent {
   capabilities: string[];
   handleRequest(content: string, context: Context): Promise<AgentResponse>;
 }
-
