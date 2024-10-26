@@ -9,7 +9,8 @@ import {
 } from "./computer.schema";
 import { exec, execSync } from "child_process";
 import { promisify } from "util";
-import { promises as fs } from "fs";
+import { promises as fsPromises } from "fs";
+import fs from "fs"; // Add this import for sync operations
 import path from "path";
 import os from "os";
 
@@ -39,17 +40,24 @@ class ComputerToolImplementation {
   private typingGroupSize = 50;
 
   constructor() {
+    // Get display dimensions from env
     this.width = parseInt(process.env.WIDTH || "0", 10);
     this.height = parseInt(process.env.HEIGHT || "0", 10);
 
+    // Validate dimensions
     if (!this.width || !this.height) {
       throw new Error("WIDTH and HEIGHT environment variables must be set");
     }
+    console.log(
+      `📐 Configured display dimensions: ${this.width}x${this.height}`
+    );
 
+    // Set up display
     const displayNum = process.env.DISPLAY_NUM;
     this.displayNum = displayNum ? parseInt(displayNum, 10) : null;
     this.displayPrefix =
       this.displayNum !== null ? `DISPLAY=:${this.displayNum} ` : "";
+    console.log(`🖥️ Using display: ${this.displayPrefix || "default"}`);
 
     this.isWindows = os.platform() === "win32";
   }
@@ -58,12 +66,14 @@ class ComputerToolImplementation {
   async execute(
     command: ComputerCommand
   ): Promise<{ result: string; base64Image?: string }> {
+    console.log("\n🖥️ ComputerTool: Executing command", command);
     const { action, text, coordinate } = command;
 
-    // Validate parameters based on action
+    console.log("🔍 Validating parameters...");
     this.validateParameters(action, text, coordinate);
 
     try {
+      console.log(`⚡ Executing action: ${action}`);
       switch (action) {
         case "key":
           return await this.handleKeyAction(text!);
@@ -99,6 +109,7 @@ class ComputerToolImplementation {
           throw new Error(`Unsupported action: ${action}`);
       }
     } catch (error) {
+      console.error(`❌ Failed to execute ${action}:`, error);
       throw new Error(`Failed to execute ${action}: ${error}`);
     }
   }
@@ -181,12 +192,29 @@ class ComputerToolImplementation {
   private async handleMouseMoveAction(
     coordinate: [number, number]
   ): Promise<{ result: string; base64Image?: string }> {
+    console.log(`🖱️ Moving mouse to coordinates: ${coordinate}`);
+
     const [x, y] = this.scaleCoordinates(
       ScalingSource.API,
       coordinate[0],
       coordinate[1]
     );
-    await this.executeShellCommand(this.getMouseMoveCommand(x, y));
+
+    console.log(`📏 Scaled coordinates: ${x}, ${y}`);
+
+    if (this.isWindows) {
+      const command = `powershell -command "
+        Add-Type -AssemblyName System.Windows.Forms
+        [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(${x},${y})
+        $pos = [System.Windows.Forms.Cursor]::Position
+        Write-Output \"Actual position: $($pos.X),$($pos.Y)\"
+      "`;
+
+      await this.executeShellCommand(command);
+    } else {
+      await this.executeShellCommand(this.getMouseMoveCommand(x, y));
+    }
+
     const base64Image = await this.takeScreenshotWithDelay();
     return { result: `Moved mouse to coordinates (${x}, ${y})`, base64Image };
   }
@@ -194,10 +222,43 @@ class ComputerToolImplementation {
   // Handle mouse click actions
   private async handleMouseClickAction(
     button: "left" | "right" | "middle"
-  ): Promise<{ result: string; base64Image?: string }> {
-    await this.executeShellCommand(this.getMouseClickCommand(button));
-    const base64Image = await this.takeScreenshotWithDelay();
-    return { result: `Performed ${button} click`, base64Image };
+  ): Promise<{ result: string }> {
+    console.log(`🖱️ Executing ${button} click`);
+
+    if (this.isWindows) {
+      const buttonMap = {
+        left: "mouse_event(0x2 | 0x4, 0, 0, 0, 0)", // MOUSEEVENTF_LEFTDOWN | MOUSEEVENTF_LEFTUP
+        right: "mouse_event(0x8 | 0x10, 0, 0, 0, 0)", // MOUSEEVENTF_RIGHTDOWN | MOUSEEVENTF_RIGHTUP
+        middle: "mouse_event(0x20 | 0x40, 0, 0, 0, 0)", // MOUSEEVENTF_MIDDLEDOWN | MOUSEEVENTF_MIDDLEUP
+      };
+
+      const command = `powershell -command "
+        Add-Type -TypeDefinition @'
+        using System;
+        using System.Runtime.InteropServices;
+        public class MouseOperations {
+          [DllImport(\"user32.dll\")]
+          public static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, int dwExtraInfo);
+        }
+      '@
+        [MouseOperations]::${buttonMap[button]}
+      "`;
+
+      await this.executeShellCommand(command);
+      return { result: `Performed ${button} click` };
+    } else {
+      // Linux/Mac implementation using displayPrefix directly
+      const clickArg = {
+        left: "1",
+        right: "3",
+        middle: "2",
+      }[button];
+
+      await this.executeShellCommand(
+        `${this.displayPrefix}xdotool click ${clickArg}`
+      );
+      return { result: `Performed ${button} click` };
+    }
   }
 
   // Handle 'double_click' action
@@ -260,41 +321,50 @@ class ComputerToolImplementation {
     const filepath = path.join(outputDir, filename);
 
     try {
-      await fs.mkdir(outputDir, { recursive: true });
+      // Create directory synchronously to ensure it exists before taking screenshot
+      if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir, { recursive: true });
+      }
 
-      // Take full resolution screenshot first
-      const screenshotCommand = this.getScreenshotCommand(filepath);
-      await execAsync(screenshotCommand);
+      console.log("📁 Created output directory:", outputDir);
+      console.log(
+        "📷 Executing screenshot command:",
+        this.getScreenshotCommand(filepath)
+      );
 
-      // Add a longer delay to ensure the file is written
-      await this.delay(1000);
+      await execAsync(this.getScreenshotCommand(filepath));
+
+      // Add delay and file check before proceeding
+      await this.delay(500); // Add small delay for file system
+
+      // Verify file exists before proceeding
+      if (!fs.existsSync(filepath)) {
+        throw new Error(`Screenshot file was not created at ${filepath}`);
+      }
 
       if (this.scalingEnabled) {
-        const [targetWidth, targetHeight] = this.scaleCoordinates(
+        const [x, y] = this.scaleCoordinates(
           ScalingSource.COMPUTER,
           this.width,
           this.height
         );
 
-        // Updated ImageMagick command to match Python version's behavior
-        // The '!' flag forces the exact dimensions without preserving aspect ratio
         const resizeCommand = this.isWindows
-          ? `magick "${filepath}" -resize ${targetWidth}x${targetHeight} -gravity center -extent ${targetWidth}x${targetHeight} "${filepath}"`
-          : `convert "${filepath}" -resize ${targetWidth}x${targetHeight}! "${filepath}"`;
+          ? `magick "${filepath}" -resize ${x}x${y}! "${filepath}"`
+          : `convert "${filepath}" -resize ${x}x${y}! "${filepath}"`;
 
         await execAsync(resizeCommand);
-        // Add a small delay after resize
-        await this.delay(500);
       }
 
-      const imageBuffer = await fs.readFile(filepath);
+      const imageBuffer = await fsPromises.readFile(filepath);
       return imageBuffer.toString("base64");
     } catch (error) {
-      console.error("Screenshot error details:", error);
       throw new Error(`Failed to take screenshot: ${error}`);
     } finally {
       try {
-        // await fs.unlink(filepath);
+        if (fs.existsSync(filepath)) {
+          await fsPromises.unlink(filepath);
+        }
       } catch {
         // Ignore cleanup errors
       }
@@ -303,7 +373,14 @@ class ComputerToolImplementation {
 
   // Execute a shell command
   private async executeShellCommand(command: string): Promise<void> {
-    await execAsync(command);
+    console.log("🔧 Executing shell command:", command);
+    try {
+      await execAsync(command);
+      console.log("✅ Shell command completed successfully");
+    } catch (error) {
+      console.error("❌ Shell command failed:", error);
+      throw error;
+    }
   }
 
   // Scale coordinates based on scaling settings
@@ -470,18 +547,29 @@ class ComputerToolImplementation {
   // Build command for 'screenshot' action
   private getScreenshotCommand(filepath: string): string {
     if (this.isWindows) {
-      return `powershell -command "Add-Type -AssemblyName System.Drawing; Add-Type -AssemblyName System.Windows.Forms; $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $bitmap = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height); $graphics = [System.Drawing.Graphics]::FromImage($bitmap); $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size); $bitmap.Save('${filepath}'); $graphics.Dispose(); $bitmap.Dispose();"`;
+      // Simplified and more reliable Windows screenshot command
+      return `powershell -command "
+        Add-Type -AssemblyName System.Windows.Forms
+        Add-Type -AssemblyName System.Drawing
+        $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+        $bitmap = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height)
+        $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+        $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+        $bitmap.Save('${filepath.replace(/\\/g, "\\\\")}')"`;
     } else {
-      // Try gnome-screenshot first
-      const gnomeScreenshotAvailable = !!execSync(
-        "command -v gnome-screenshot",
-        { encoding: "utf8" }
-      ).trim();
-      if (gnomeScreenshotAvailable) {
-        return `${this.displayPrefix}gnome-screenshot -f ${filepath} -p`;
-      } else {
-        // Fall back to scrot
-        return `${this.displayPrefix}scrot -p ${filepath}`;
+      // Linux implementation remains the same
+      try {
+        if (execSync("command -v maim", { encoding: "utf8" }).trim()) {
+          return `${this.displayPrefix}maim -g ${this.width}x${this.height}+0+0 "${filepath}"`;
+        } else if (
+          execSync("command -v gnome-screenshot", { encoding: "utf8" }).trim()
+        ) {
+          return `${this.displayPrefix}gnome-screenshot -f "${filepath}"`;
+        } else {
+          return `${this.displayPrefix}scrot -a 0,0,${this.width},${this.height} "${filepath}"`;
+        }
+      } catch {
+        return `${this.displayPrefix}scrot -a 0,0,${this.width},${this.height} "${filepath}"`;
       }
     }
   }
