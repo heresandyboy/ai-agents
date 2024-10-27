@@ -1,7 +1,13 @@
 import "dotenv/config";
+// Enable debug logging
+process.env.DEBUG = "agent:*";
+
 import Agent from "./lib/agents/base/Agent";
 import readline from "readline";
 import { CalculatorTool } from "./lib/tools/CalculatorTool";
+import debug from "debug";
+
+const log = debug("agent:*");
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -9,6 +15,8 @@ const rl = readline.createInterface({
 });
 
 async function main() {
+  log("Starting Math Assistant CLI");
+
   // Initialize agent with calculator tool
   const agent = new Agent(
     {
@@ -27,14 +35,18 @@ async function main() {
   const askQuestion = () => {
     rl.question("\nYour question: ", async (input) => {
       if (input.toLowerCase() === "exit") {
+        log("Exiting CLI");
         rl.close();
         return;
       }
 
       try {
+        log(`Processing user input: "${input}"`);
         const response = await agent.process(input);
         console.log("\nAssistant:", response);
+        log("Response delivered successfully");
       } catch (error) {
+        log("Error processing input:", error);
         console.error("Error:", error);
       }
 
@@ -45,4 +57,7 @@ async function main() {
   askQuestion();
 }
 
-main().catch(console.error);
+main().catch((error) => {
+  log("Fatal error:", error);
+  console.error(error);
+});
