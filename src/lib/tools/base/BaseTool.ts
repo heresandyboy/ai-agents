@@ -1,34 +1,45 @@
 // src/lib/tools/base/BaseTool.ts
-import { tool } from "ai";
-import { z } from "zod";
-import { ToolMetadata } from "../types/tool";
 
-export abstract class BaseTool {
-  protected vercelTool: ReturnType<typeof tool>;
+import { CoreTool, tool } from "ai";
+import { z } from "zod";
+
+// src/lib/tools/types/tool.ts
+export interface ToolMetadata {
+  name: string;
+  categories: string[];
+  version: string;
+  author?: string;
+  description: string;
+  requiresAuth: boolean;
+  rateLimit?: {
+    requests: number;
+    period: "second" | "minute" | "hour";
+  };
+}
+
+export abstract class BaseTool<P extends z.ZodTypeAny, R = unknown> {
+  protected vercelTool: CoreTool<P, R>;
 
   constructor(
     protected readonly metadata: ToolMetadata,
-    protected readonly parametersSchema: z.ZodTypeAny
+    protected readonly parametersSchema: P
   ) {
     this.vercelTool = tool({
-      name: metadata.name,
       description: metadata.description,
       parameters: this.parametersSchema,
       execute: this.execute.bind(this),
     });
   }
 
-  // Abstract method for execution
   protected abstract execute(
-    params: z.infer<typeof this.parametersSchema>
-  ): Promise<any>;
+    params: z.infer<P>,
+    options: { abortSignal?: AbortSignal }
+  ): PromiseLike<R>;
 
-  // Getter for the Vercel AI SDK tool instance
   public getVercelTool() {
     return this.vercelTool;
   }
 
-  // Getter for tool metadata
   public getMetadata() {
     return this.metadata;
   }

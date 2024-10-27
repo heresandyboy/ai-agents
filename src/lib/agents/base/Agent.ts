@@ -1,16 +1,52 @@
 // agent/agent.ts
 import { createPortkey } from "@portkey-ai/vercel-provider";
-import { generateText } from "ai";
-// import { AgentConfig } from "../types/agent";
-// import { BaseTool } from "../tools/base";
-import { AgentConfig } from "../types/agent";
+import { generateText, CoreMessage } from "ai";
+import { z } from "zod";
 import { BaseTool } from "../../tools/base/BaseTool";
 
-export class Agent {
-  private tools: Map<string, BaseTool>;
+export interface AgentConfig {
+  name: string;
+  systemPrompt: string;
+  model: string;
+  provider: "openai" | "anthropic" | "mistral";
+  temperature?: number;
+  maxTokens?: number;
+}
+
+// agent/types.ts
+export type MessageRole = "system" | "user" | "assistant" | "function";
+
+export interface Message {
+  role: MessageRole;
+  content: string;
+  name?: string;
+  function_call?: {
+    name: string;
+    arguments: string;
+  };
+}
+
+export interface StreamingOptions {
+  onStart?: () => void;
+  onToken?: (token: string) => void;
+  onComplete?: (completion: string) => void;
+}
+
+export type GenerationMode = "stream" | "complete";
+
+export interface GenerationOptions {
+  mode?: GenerationMode;
+  streaming?: StreamingOptions;
+}
+
+export default class Agent {
+  private tools: Map<string, BaseTool<z.ZodTypeAny, unknown>>;
   private llmClient: ReturnType<typeof createPortkey>;
 
-  constructor(private readonly config: AgentConfig, tools: BaseTool[] = []) {
+  constructor(
+    private readonly config: AgentConfig,
+    tools: BaseTool<z.ZodTypeAny, unknown>[] = []
+  ) {
     this.tools = new Map(tools.map((tool) => [tool.getMetadata().name, tool]));
 
     this.llmClient = createPortkey({
@@ -27,7 +63,7 @@ export class Agent {
     });
   }
 
-  public addTool(tool: BaseTool) {
+  public addTool(tool: BaseTool<z.ZodTypeAny, unknown>) {
     this.tools.set(tool.getMetadata().name, tool);
   }
 
@@ -37,17 +73,19 @@ export class Agent {
       { role: "user", content: input },
     ];
 
-    const vercelAITools = Array.from(this.tools.values()).map((tool) =>
-      tool.getVercelTool()
+    // Convert array of tools to a Record/object with tool names as keys
+    const vercelTools = Object.fromEntries(
+      Array.from(this.tools.values()).map((tool) => [
+        tool.getMetadata().name,
+        tool.getVercelTool(),
+      ])
     );
 
     const response = await generateText({
       model: this.llmClient.chatModel(""),
-      messages,
-      tools: vercelAITools,
+      messages: messages as CoreMessage[],
+      tools: vercelTools,
     });
-
-    // Optionally handle function calls and tool execution results here
 
     return response.text;
   }
