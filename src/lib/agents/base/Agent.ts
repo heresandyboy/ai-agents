@@ -1,6 +1,12 @@
 // agent/agent.ts
 import { createPortkey } from "@portkey-ai/vercel-provider";
-import { generateText, CoreMessage } from "ai";
+import {
+  generateText,
+  CoreMessage,
+  streamText,
+  CoreTool,
+  StreamTextResult,
+} from "ai";
 import { z } from "zod";
 import { BaseTool } from "../../tools/base/BaseTool";
 
@@ -26,17 +32,8 @@ export interface Message {
   };
 }
 
-export interface StreamingOptions {
-  onStart?: () => void;
-  onToken?: (token: string) => void;
-  onComplete?: (completion: string) => void;
-}
-
-export type GenerationMode = "stream" | "complete";
-
 export interface GenerationOptions {
-  mode?: GenerationMode;
-  streaming?: StreamingOptions;
+  stream?: boolean;
 }
 
 export default class Agent {
@@ -48,7 +45,6 @@ export default class Agent {
     tools: BaseTool<z.ZodTypeAny, unknown>[] = []
   ) {
     this.tools = new Map(tools.map((tool) => [tool.getMetadata().name, tool]));
-
     this.llmClient = createPortkey({
       apiKey: process.env.PORTKEY_API_KEY!,
       config: {
@@ -67,26 +63,56 @@ export default class Agent {
     this.tools.set(tool.getMetadata().name, tool);
   }
 
-  public async process(input: string): Promise<string> {
-    const messages = [
+  private prepareMessages(input: string): CoreMessage[] {
+    return [
       { role: "system", content: this.config.systemPrompt },
       { role: "user", content: input },
     ];
+  }
 
-    // Convert array of tools to a Record/object with tool names as keys
-    const vercelTools = Object.fromEntries(
+  private prepareTools() {
+    const tools = Object.fromEntries(
       Array.from(this.tools.values()).map((tool) => [
         tool.getMetadata().name,
         tool.getVercelTool(),
       ])
     );
+    return tools as Record<string, CoreTool<any, any>>;
+  }
 
+  private async handleStreamGeneration(
+    messages: CoreMessage[],
+    tools: Record<string, CoreTool<any, any>>
+  ) {
+    return await streamText({
+      model: this.llmClient.chatModel(""),
+      messages,
+      tools,
+    });
+  }
+
+  private async handleCompleteGeneration(
+    messages: CoreMessage[],
+    tools: Record<string, CoreTool<any, any>>
+  ): Promise<string> {
     const response = await generateText({
       model: this.llmClient.chatModel(""),
-      messages: messages as CoreMessage[],
-      tools: vercelTools,
+      messages,
+      tools,
     });
 
     return response.text;
+  }
+
+  public async process(
+    input: string,
+    options: GenerationOptions = {}
+  ): Promise<string | StreamTextResult<typeof tools>> {
+    const messages = this.prepareMessages(input);
+    const tools = this.prepareTools();
+
+    return options.stream
+      ? this.handleStreamGeneration(messages, tools)
+      : this.handleCompleteGeneration(messages, tools);
   }
 }
