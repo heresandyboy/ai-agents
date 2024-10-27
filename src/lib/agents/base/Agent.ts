@@ -39,6 +39,7 @@ export interface GenerationOptions {
 export default class Agent {
   private tools: Map<string, BaseTool<z.ZodTypeAny, unknown>>;
   private llmClient: ReturnType<typeof createPortkey>;
+  private messageHistory: CoreMessage[] = []; // Store conversation history
 
   constructor(
     private readonly config: AgentConfig,
@@ -66,6 +67,7 @@ export default class Agent {
   private prepareMessages(input: string): CoreMessage[] {
     return [
       { role: "system", content: this.config.systemPrompt },
+      ...this.messageHistory, // Include previous messages
       { role: "user", content: input },
     ];
   }
@@ -88,6 +90,13 @@ export default class Agent {
       model: this.llmClient.chatModel(""),
       messages,
       tools,
+      onFinish: ({ text }) => {
+        // Add the assistant's response to history after stream completes
+        this.messageHistory.push({
+          role: "assistant",
+          content: text,
+        });
+      },
     });
   }
 
@@ -111,8 +120,28 @@ export default class Agent {
     const messages = this.prepareMessages(input);
     const tools = this.prepareTools();
 
-    return options.stream
-      ? this.handleStreamGeneration(messages, tools)
-      : this.handleCompleteGeneration(messages, tools);
+    const response = options.stream
+      ? await this.handleStreamGeneration(messages, tools)
+      : await this.handleCompleteGeneration(messages, tools);
+
+    // Store the conversation history
+    this.messageHistory.push({ role: "user", content: input });
+    if (!options.stream) {
+      this.messageHistory.push({
+        role: "assistant",
+        content: response as string,
+      });
+    }
+
+    return response;
+  }
+
+  // Add methods to manage history
+  public clearHistory(): void {
+    this.messageHistory = [];
+  }
+
+  public getHistory(): CoreMessage[] {
+    return [...this.messageHistory];
   }
 }

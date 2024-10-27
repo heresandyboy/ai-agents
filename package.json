@@ -11,17 +11,21 @@
     "test": "jest",
     "start": "npm run build && node dist/index.js",
     "gateway": "npx @portkey-ai/gateway",
-    "deps-windows": "choco install imagemagick"
+    "deps-windows": "choco install imagemagick",
+    "cli": "ts-node src/cli.ts"
   },
   "dependencies": {
     "@portkey-ai/vercel-provider": "^1.0.1",
+    "@types/debug": "^4.1.12",
     "ai": "^3.4.18",
+    "debug": "^4.3.7",
     "dotenv": "^16.4.5",
     "keysender": "^2.3.0",
     "langfuse": "^3.28.0",
     "lru-cache": "^11.0.1",
     "portkey-ai": "^1.5.1",
     "screenshot-desktop": "^1.15.0",
+    "ts-node": "^10.9.2",
     "zod": "^3.23.8"
   },
   "devDependencies": {
