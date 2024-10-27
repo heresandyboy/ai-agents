@@ -1,12 +1,11 @@
-// src/agents/computerAgent.ts
 import { BaseAgent } from "./baseAgent";
 import { Context } from "../agent";
 import { createPortkey } from "@portkey-ai/vercel-provider";
-import { CoreTool, GenerateTextResult } from "ai";
+import { CoreTool, generateText, GenerateTextResult } from "ai";
 import { computerTool } from "../tools/computer/computer.tool";
 import { editorTool } from "../tools/editor/editor.tool";
 import { bashTool } from "../tools/bash/bash.tool";
-import { samplingLoop } from "../utils/samplingLoop";
+import { safeStringify } from "../utils/logging";
 
 type ComputerTools = {
   computer: typeof computerTool;
@@ -14,7 +13,7 @@ type ComputerTools = {
   bash: typeof bashTool;
 };
 
-export class ComputerAgent extends BaseAgent<ComputerTools> {
+export class ComputerAgentRaw extends BaseAgent<ComputerTools> {
   private portkey;
 
   constructor() {
@@ -40,52 +39,37 @@ export class ComputerAgent extends BaseAgent<ComputerTools> {
     });
   }
 
-  getModel() {
-    return this.portkey.chatModel("");
-  }
-
-  getTools(): ComputerTools {
-    return {
-      computer: computerTool,
-      editor: editorTool,
-      bash: bashTool,
-    };
-  }
-
-  async executeTool(
-    toolName: keyof ComputerTools, // Change string to keyof ComputerTools
-    args: any
-  ): Promise<{ result: string; base64Image?: string }> {
-    const tools = this.getTools();
-
-    if (toolName in tools) {
-      const toolResult = await tools[toolName].execute(args, {
-        abortSignal: undefined,
-      });
-      return toolResult;
-    } else {
-      throw new Error(`Tool ${toolName} not found`);
-    }
-  }
-
   async handleRequest(content: string, context: Context) {
     console.log("\n🤖 ComputerAgent: Processing request");
     console.log("📝 Content:", content);
-    console.log("🔍 Context:", context);
+    console.log("🔍 Context:", safeStringify(context));
+
+    if (!this.portkey) {
+      throw new Error("Portkey client not initialized");
+    }
 
     try {
-      console.log("🔄 Starting sampling loop...");
-      const result = await samplingLoop<ComputerTools>({
-        content,
-        context,
-        agent: this,
+      console.log("🔄 Generating text with AI model...");
+      const result = await generateText({
+        model: this.portkey.chatModel(""),
+        messages: [{ role: "user", content }],
+        tools: {
+          computer: computerTool,
+          editor: editorTool,
+          bash: bashTool,
+        },
       });
 
-      console.log("\n✅ Sampling loop completed");
+      console.log("✅ AI generation completed");
       console.log("📊 Result details:");
       console.log("- Text:", result.text);
-      console.log("- Tool Calls:", result.toolCalls);
-      console.log("- Tool Results:", result.toolResults);
+      console.log("- Tool Calls:", safeStringify(result.toolCalls));
+      console.log("- Tool Results:", safeStringify(result.toolResults));
+      console.log("- Usage:", safeStringify(result.usage));
+      console.log(
+        "- Response Messages:",
+        safeStringify(result.responseMessages)
+      );
 
       return result;
     } catch (error) {

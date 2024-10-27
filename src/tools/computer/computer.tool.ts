@@ -12,15 +12,10 @@ import { promisify } from "util";
 import { promises as fs } from "fs";
 import path from "path";
 import os from "os";
+import screenshot from "screenshot-desktop";
+import { Hardware } from "keysender";
 
 const execAsync = promisify(exec);
-
-// ToolResult interface to match the Python ToolResult
-interface ToolResult {
-  output?: string;
-  error?: string;
-  base64_image?: string;
-}
 
 // Helper function to split strings into chunks
 function chunks(s: string, chunkSize: number): string[] {
@@ -34,11 +29,13 @@ class ComputerToolImplementation {
   private scalingEnabled = true;
   private screenshotDelay = 2000; // In milliseconds
   private displayPrefix: string;
-  private isWindows: boolean;
+  public isWindows: boolean;
   private typingDelayMs = 12;
   private typingGroupSize = 50;
+  private useNodeScreenshot = true; // New flag to toggle screenshot library
+  private hardware = new Hardware(0);
 
-  constructor() {
+  constructor(screenshotDelay?: number) {
     this.width = parseInt(process.env.WIDTH || "0", 10);
     this.height = parseInt(process.env.HEIGHT || "0", 10);
 
@@ -52,6 +49,11 @@ class ComputerToolImplementation {
       this.displayNum !== null ? `DISPLAY=:${this.displayNum} ` : "";
 
     this.isWindows = os.platform() === "win32";
+
+    // Initialize Hardware with window handle 0 for global control
+    this.hardware = new Hardware(0);
+
+    this.screenshotDelay = screenshotDelay || 2000;
   }
 
   // Public method to execute commands
@@ -59,6 +61,7 @@ class ComputerToolImplementation {
     command: ComputerCommand
   ): Promise<{ result: string; base64Image?: string }> {
     const { action, text, coordinate } = command;
+    console.log(`Executing action: ${action}`);
 
     // Validate parameters based on action
     this.validateParameters(action, text, coordinate);
@@ -75,15 +78,24 @@ class ComputerToolImplementation {
           return await this.handleMouseMoveAction(coordinate!);
 
         case "left_click":
-          return await this.handleMouseClickAction("left");
-
         case "right_click":
-          return await this.handleMouseClickAction("right");
-
         case "middle_click":
-          return await this.handleMouseClickAction("middle");
+          // Match Python's click handling
+          const clickMap = {
+            left_click: "left",
+            right_click: "right",
+            middle_click: "middle",
+          } as const;
+          // If coordinates are provided, move first then click
+          if (coordinate) {
+            await this.handleMouseMoveAction(coordinate);
+          }
+          return await this.handleMouseClickAction(clickMap[action]);
 
         case "double_click":
+          if (coordinate) {
+            await this.handleMouseMoveAction(coordinate);
+          }
           return await this.handleDoubleClickAction();
 
         case "left_click_drag":
@@ -96,7 +108,7 @@ class ComputerToolImplementation {
           return await this.handleCursorPositionAction();
 
         default:
-          throw new Error(`Unsupported action: ${action}`);
+          throw new Error(`Invalid action: ${action}`);
       }
     } catch (error) {
       throw new Error(`Failed to execute ${action}: ${error}`);
@@ -113,44 +125,32 @@ class ComputerToolImplementation {
       if (!text) {
         throw new Error(`'text' parameter is required for action '${action}'`);
       }
-      if (coordinate) {
-        throw new Error(
-          `'coordinate' parameter is not accepted for action '${action}'`
-        );
-      }
     } else if (["mouse_move", "left_click_drag"].includes(action)) {
       if (!coordinate) {
         throw new Error(
           `'coordinate' parameter is required for action '${action}'`
         );
       }
-      if (text) {
-        throw new Error(
-          `'text' parameter is not accepted for action '${action}'`
-        );
-      }
-    } else if (
-      [
-        "left_click",
-        "right_click",
-        "middle_click",
-        "double_click",
-        "screenshot",
-        "cursor_position",
-      ].includes(action)
+    }
+
+    // Allow coordinates for click actions, but they're optional
+    if (
+      ["left_click", "right_click", "middle_click", "double_click"].includes(
+        action
+      )
     ) {
-      if (coordinate) {
-        throw new Error(
-          `'coordinate' parameter is not accepted for action '${action}'`
-        );
-      }
+      // Coordinates are optional for these actions
       if (text) {
         throw new Error(
           `'text' parameter is not accepted for action '${action}'`
         );
       }
-    } else {
-      throw new Error(`Invalid action: ${action}`);
+    } else if (["screenshot", "cursor_position"].includes(action)) {
+      if (coordinate || text) {
+        throw new Error(
+          `'coordinate' and 'text' parameters are not accepted for action '${action}'`
+        );
+      }
     }
   }
 
@@ -186,7 +186,13 @@ class ComputerToolImplementation {
       coordinate[0],
       coordinate[1]
     );
-    await this.executeShellCommand(this.getMouseMoveCommand(x, y));
+
+    try {
+      await this.hardware.mouse.moveTo(x, y);
+    } catch (error) {
+      throw new Error(`Failed to move mouse: ${error}`);
+    }
+
     const base64Image = await this.takeScreenshotWithDelay();
     return { result: `Moved mouse to coordinates (${x}, ${y})`, base64Image };
   }
@@ -195,7 +201,14 @@ class ComputerToolImplementation {
   private async handleMouseClickAction(
     button: "left" | "right" | "middle"
   ): Promise<{ result: string; base64Image?: string }> {
-    await this.executeShellCommand(this.getMouseClickCommand(button));
+    console.log(`🖱️ Executing ${button} click`);
+
+    try {
+      await this.hardware.mouse.click(button);
+    } catch (error) {
+      throw new Error(`Failed to perform mouse click: ${error}`);
+    }
+
     const base64Image = await this.takeScreenshotWithDelay();
     return { result: `Performed ${button} click`, base64Image };
   }
@@ -205,7 +218,12 @@ class ComputerToolImplementation {
     result: string;
     base64Image?: string;
   }> {
-    await this.executeShellCommand(this.getDoubleClickCommand());
+    try {
+      await this.hardware.mouse.click("left", 2); // Second parameter specifies click count
+    } catch (error) {
+      throw new Error(`Failed to perform double click: ${error}`);
+    }
+
     const base64Image = await this.takeScreenshotWithDelay();
     return { result: "Performed double click", base64Image };
   }
@@ -219,12 +237,17 @@ class ComputerToolImplementation {
       coordinate[0],
       coordinate[1]
     );
-    await this.executeShellCommand(this.getLeftClickDragCommand(x, y));
+
+    try {
+      await this.hardware.mouse.toggle("left", true); // Press left button
+      await this.hardware.mouse.moveTo(x, y); // Move to target
+      await this.hardware.mouse.toggle("left", false); // Release left button
+    } catch (error) {
+      throw new Error(`Failed to perform drag action: ${error}`);
+    }
+
     const base64Image = await this.takeScreenshotWithDelay();
-    return {
-      result: `Performed left click drag to coordinates (${x}, ${y})`,
-      base64Image,
-    };
+    return { result: `Dragged to coordinates (${x}, ${y})`, base64Image };
   }
 
   // Handle 'screenshot' action
@@ -244,8 +267,11 @@ class ComputerToolImplementation {
 
   // Take screenshot with delay
   private async takeScreenshotWithDelay(): Promise<string> {
-    await this.delay(this.screenshotDelay);
-    return await this.takeScreenshot();
+    // Avoid delay during testing
+    const delay = process.env.NODE_ENV === "test" ? 0 : this.screenshotDelay;
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    const screenshotResult = await this.handleScreenshotAction();
+    return screenshotResult.base64Image!;
   }
 
   // Delay utility function
@@ -259,15 +285,25 @@ class ComputerToolImplementation {
     const filename = `screenshot_${Date.now()}.png`;
     const filepath = path.join(outputDir, filename);
 
+    // Add new path for original screenshot
+    const originalFilepath = path.join(outputDir, `original_${filename}`);
+
     try {
       await fs.mkdir(outputDir, { recursive: true });
 
       // Take full resolution screenshot first
-      const screenshotCommand = this.getScreenshotCommand(filepath);
-      await execAsync(screenshotCommand);
+      const screenshotCommand = await this.getScreenshotCommand(filepath);
+      if (screenshotCommand) {
+        await execAsync(screenshotCommand);
+      } else if (this.useNodeScreenshot) {
+        // If no command was returned, it means we used the screenshot library
+        // Copy the original file before resizing
+        await fs.copyFile(filepath, originalFilepath);
+        console.log(`Original screenshot saved to: ${originalFilepath}`);
+      }
 
       // Add a longer delay to ensure the file is written
-      await this.delay(1000);
+      // await this.delay(1000);
 
       if (this.scalingEnabled) {
         const [targetWidth, targetHeight] = this.scaleCoordinates(
@@ -277,7 +313,6 @@ class ComputerToolImplementation {
         );
 
         // Updated ImageMagick command to match Python version's behavior
-        // The '!' flag forces the exact dimensions without preserving aspect ratio
         const resizeCommand = this.isWindows
           ? `magick "${filepath}" -resize ${targetWidth}x${targetHeight} -gravity center -extent ${targetWidth}x${targetHeight} "${filepath}"`
           : `convert "${filepath}" -resize ${targetWidth}x${targetHeight}! "${filepath}"`;
@@ -295,6 +330,7 @@ class ComputerToolImplementation {
     } finally {
       try {
         // await fs.unlink(filepath);
+        // await fs.unlink(originalFilepath);  // Uncomment if you want to clean up original files too
       } catch {
         // Ignore cleanup errors
       }
@@ -349,26 +385,21 @@ class ComputerToolImplementation {
 
   // Get cursor position
   private async getCursorPosition(): Promise<[number, number]> {
-    if (this.isWindows) {
-      const script = `
-        Add-Type -AssemblyName System.Windows.Forms
-        $pos = [System.Windows.Forms.Cursor]::Position
-        Write-Output "$($pos.X) $($pos.Y)"
-      `;
-      const { stdout } = await execAsync(`powershell -command "${script}"`);
-      const [xStr, yStr] = stdout.trim().split(" ");
-      const x = parseInt(xStr, 10);
-      const y = parseInt(yStr, 10);
-      return this.scaleCoordinates(ScalingSource.COMPUTER, x, y);
-    } else {
-      const { stdout } = await execAsync(
-        `${this.displayPrefix}xdotool getmouselocation --shell`
-      );
-      const xMatch = stdout.match(/X=(\d+)/);
-      const yMatch = stdout.match(/Y=(\d+)/);
-      const x = xMatch ? parseInt(xMatch[1], 10) : 0;
-      const y = yMatch ? parseInt(yMatch[1], 10) : 0;
-      return this.scaleCoordinates(ScalingSource.COMPUTER, x, y);
+    try {
+      // Get cursor position using keysender's Hardware class
+      const position = this.hardware.mouse.getPos();
+      const x = position.x;
+      const y = position.y;
+
+      // Only scale if we got valid numbers
+      if (!isNaN(x) && !isNaN(y)) {
+        return this.scaleCoordinates(ScalingSource.COMPUTER, x, y);
+      }
+
+      throw new Error(`Invalid cursor position: x=${x}, y=${y}`);
+    } catch (error) {
+      console.error("Error getting cursor position:", error);
+      throw error;
     }
   }
 
@@ -400,75 +431,23 @@ class ComputerToolImplementation {
     }
   }
 
-  // Build command for 'mouse_move' action
-  private getMouseMoveCommand(x: number, y: number): string {
-    if (this.isWindows) {
-      const script = `
-        Add-Type -AssemblyName System.Windows.Forms
-        [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(${x},${y})
-      `;
-      return `powershell -command "${script}"`;
-    } else {
-      return `${this.displayPrefix}xdotool mousemove --sync ${x} ${y}`;
-    }
-  }
-
-  // Build command for mouse click actions
-  private getMouseClickCommand(button: "left" | "right" | "middle"): string {
-    if (this.isWindows) {
-      const buttonMapping: Record<string, string> = {
-        left: "Left",
-        right: "Right",
-        middle: "Middle",
-      };
-      const script = `
-        Add-Type -AssemblyName System.Windows.Forms
-        $pos = [System.Windows.Forms.Cursor]::Position
-        [System.Windows.Forms.SendKeys]::SendWait("{${buttonMapping[button]} Click}")
-      `;
-      return `powershell -command "${script}"`;
-    } else {
-      const buttonCode: Record<string, number> = {
-        left: 1,
-        right: 3,
-        middle: 2,
-      };
-      return `${this.displayPrefix}xdotool click ${buttonCode[button]}`;
-    }
-  }
-
-  // Build command for 'double_click' action
-  private getDoubleClickCommand(): string {
-    if (this.isWindows) {
-      const script = `
-        Add-Type -AssemblyName System.Windows.Forms
-        $pos = [System.Windows.Forms.Cursor]::Position
-        [System.Windows.Forms.SendKeys]::SendWait("{LEFTCLICK}{LEFTCLICK}")
-      `;
-      return `powershell -command "${script}"`;
-    } else {
-      return `${this.displayPrefix}xdotool click --repeat 2 --delay 500 1`;
-    }
-  }
-
-  // Build command for 'left_click_drag' action
-  private getLeftClickDragCommand(x: number, y: number): string {
-    if (this.isWindows) {
-      const script = `
-        Add-Type -AssemblyName System.Windows.Forms
-        $startPos = [System.Windows.Forms.Cursor]::Position
-        [System.Windows.Forms.Control]::MouseButtonsDown += [System.Windows.Forms.MouseButtons]::Left
-        [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(${x},${y})
-        [System.Windows.Forms.Control]::MouseButtonsDown -= [System.Windows.Forms.MouseButtons]::Left
-      `;
-      return `powershell -command "${script}"`;
-    } else {
-      return `${this.displayPrefix}xdotool mousedown 1 mousemove --sync ${x} ${y} mouseup 1`;
-    }
-  }
-
   // Build command for 'screenshot' action
-  private getScreenshotCommand(filepath: string): string {
+  private async getScreenshotCommand(filepath: string): Promise<string | void> {
+    if (this.useNodeScreenshot) {
+      try {
+        await screenshot({ filename: filepath });
+        return;
+      } catch (error) {
+        console.error("Failed to take screenshot with node-screenshot:", error);
+        // Fall back to original methods if node-screenshot fails
+        return this.getLegacyScreenshotCommand(filepath);
+      }
+    }
+    return this.getLegacyScreenshotCommand(filepath);
+  }
+
+  // Renamed original screenshot method
+  private getLegacyScreenshotCommand(filepath: string): string {
     if (this.isWindows) {
       return `powershell -command "Add-Type -AssemblyName System.Drawing; Add-Type -AssemblyName System.Windows.Forms; $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $bitmap = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height); $graphics = [System.Drawing.Graphics]::FromImage($bitmap); $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size); $bitmap.Save('${filepath}'); $graphics.Dispose(); $bitmap.Dispose();"`;
     } else {
@@ -489,7 +468,7 @@ class ComputerToolImplementation {
 
 // Create the Vercel AI SDK compatible tool
 export const computerTool = tool({
-  // name: "computer",
+  // toolName: "computer",
   description:
     "Interact with the computer screen, keyboard, and mouse. The tool parameters are defined by Anthropic and are not editable.",
   parameters: computerCommandSchema,
@@ -498,3 +477,5 @@ export const computerTool = tool({
     return computerTool.execute(params);
   },
 });
+
+export { ComputerToolImplementation };

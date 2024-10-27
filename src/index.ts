@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { AgentManager } from "./agentManager";
 import { AIHandler } from "./handler";
-import { ComputerAgent } from "./agents/computerAgent";
+import { ComputerAgentRaw } from "./agents/computerAgent";
 import { LocalAgent } from "./agents/localAgent";
 import { safeStringify } from "./utils/logging";
 
@@ -11,14 +11,14 @@ import { safeStringify } from "./utils/logging";
   const agentManager = new AgentManager();
   console.log("📋 Initializing AgentManager");
 
-  agentManager.registerAgent(new ComputerAgent());
+  agentManager.registerAgent(new ComputerAgentRaw());
   console.log("🤖 Registered ComputerAgent");
 
   const aiHandler = new AIHandler(agentManager);
   console.log("🎮 AIHandler initialized");
 
-  const userInput =
-    "Move the mouse to coordinates 500,500 and perform a right click";
+  const userInput = "Find and open Google Chrome without using bash";
+  // "Move the mouse to coordinates 500,500 and perform a right click";
   console.log("\n📝 Processing user input:", userInput);
 
   try {
