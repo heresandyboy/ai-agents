@@ -1,170 +1,115 @@
-// agent/agent.ts
-import { createPortkey } from "@portkey-ai/vercel-provider";
 import {
-  generateText,
-  CoreMessage,
-  streamText,
-  CoreTool,
-  StreamTextResult,
-} from "ai";
-import { z } from "zod";
-import { BaseTool } from "../../tools/base/BaseTool";
+  ILanguageModel,
+  GenerationResponse,
+  StreamingResponse,
+} from "../../llm/interfaces/ILanguageModel";
+import { ITool, IToolRegistry } from "../../tools/interfaces/ITool";
+import { Message, GenerationOptions } from "../../types/common";
+import { ResponseHandlerFactory } from "../responses/ResponseHandler";
+import { AgentError } from "../errors/AgentError";
 import debug from "debug";
+import { AssistantResponse, CoreTool } from "ai";
+import { StreamTextResult } from "ai";
 
-// Add logger initialization
-const log = {
-  agent: debug("agent:main"),
-  tools: debug("agent:tools"),
-  llm: debug("agent:llm"),
-};
+const log = debug("agent:main");
 
 export interface AgentConfig {
   name: string;
   systemPrompt: string;
-  model: string;
-  provider: "openai" | "anthropic" | "mistral";
   temperature?: number;
   maxTokens?: number;
+  maxSteps?: number;
 }
 
-// agent/types.ts
-export type MessageRole = "system" | "user" | "assistant" | "function";
-
-export interface Message {
-  role: MessageRole;
-  content: string;
-  name?: string;
-  function_call?: {
-    name: string;
-    arguments: string;
-  };
-}
-
-export interface GenerationOptions {
-  stream?: boolean;
-}
-
-export default class Agent {
-  private tools: Map<string, BaseTool<z.ZodTypeAny, unknown>>;
-  private llmClient: ReturnType<typeof createPortkey>;
-  private messageHistory: CoreMessage[] = []; // Store conversation history
+export class Agent {
+  private messageHistory: Message[] = [];
 
   constructor(
     private readonly config: AgentConfig,
-    tools: BaseTool<z.ZodTypeAny, unknown>[] = []
+    private readonly languageModel: ILanguageModel,
+    private readonly toolRegistry: IToolRegistry
   ) {
-    this.tools = new Map(tools.map((tool) => [tool.getMetadata().name, tool]));
-    log.agent("Initializing agent with config:", config);
-    log.tools("Registered tools:", Array.from(this.tools.keys()));
-
-    this.llmClient = createPortkey({
-      apiKey: process.env.PORTKEY_API_KEY!,
-      config: {
-        provider: config.provider,
-        api_key: process.env[`${config.provider.toUpperCase()}_API_KEY`]!,
-        override_params: {
-          model: config.model,
-          temperature: config.temperature,
-          max_tokens: config.maxTokens,
-        },
-      },
-    });
-    log.agent("LLM client initialized");
-  }
-
-  public addTool(tool: BaseTool<z.ZodTypeAny, unknown>) {
-    this.tools.set(tool.getMetadata().name, tool);
-  }
-
-  private prepareMessages(input: string): CoreMessage[] {
-    const messages = [
-      { role: "system", content: this.config.systemPrompt },
-      ...this.messageHistory,
-      { role: "user", content: input },
-    ];
-    log.llm("Prepared messages:", messages);
-    return messages as CoreMessage[];
-  }
-
-  private prepareTools() {
-    const tools = Object.fromEntries(
-      Array.from(this.tools.values()).map((tool) => [
-        tool.getMetadata().name,
-        tool.getVercelTool(),
-      ])
-    );
-    log.tools("Prepared tools for LLM:", Object.keys(tools));
-    return tools as Record<string, CoreTool<any, any>>;
-  }
-
-  private async handleStreamGeneration(
-    messages: CoreMessage[],
-    tools: Record<string, CoreTool<any, any>>
-  ) {
-    log.llm("Starting stream generation");
-    return await streamText({
-      model: this.llmClient.chatModel(""),
-      messages,
-      tools,
-      onFinish: ({ text }) => {
-        log.llm("Stream completed, final text:", text);
-        this.messageHistory.push({
-          role: "assistant",
-          content: text,
-        });
-      },
-    });
-  }
-
-  private async handleCompleteGeneration(
-    messages: CoreMessage[],
-    tools: Record<string, CoreTool<any, any>>
-  ): Promise<string> {
-    log.llm("Starting complete generation");
-    const response = await generateText({
-      model: this.llmClient.chatModel(""),
-      messages,
-      tools,
-    });
-    log.llm("Generation completed:", response);
-    return response.text;
+    log("Initializing agent:", config.name);
   }
 
   public async process(
     input: string,
     options: GenerationOptions = {}
-  ): Promise<string | StreamTextResult<typeof tools>> {
-    log.agent(`Processing input: "${input}"`);
+  ): Promise<string | StreamingResponse> {
+    log(`Processing input: "${input}"`);
     const messages = this.prepareMessages(input);
-    const tools = this.prepareTools();
+    const tools = Array.from(this.toolRegistry.getTools().values());
 
     try {
       const response = options.stream
         ? await this.handleStreamGeneration(messages, tools)
         : await this.handleCompleteGeneration(messages, tools);
-
-      this.messageHistory.push({ role: "user", content: input });
-      if (!options.stream) {
-        this.messageHistory.push({
-          role: "assistant",
-          content: response as string,
-        });
+      if (typeof response === "string") {
+        this.updateMessageHistory(input, response);
       }
-
-      log.agent("Processing completed successfully");
+      log("Processing completed successfully");
       return response;
     } catch (error) {
-      log.agent("Error during processing:", error);
-      throw error;
+      log("Error during processing:", error);
+      throw new AgentError("Processing failed", { cause: error });
     }
   }
 
-  // Add methods to manage history
-  public clearHistory(): void {
-    this.messageHistory = [];
+  private prepareMessages(input: string): Message[] {
+    const messages = [
+      { role: "system", content: this.config.systemPrompt },
+      ...this.messageHistory,
+      { role: "user", content: input },
+    ];
+    log("Prepared messages for LLM");
+    return messages as Message[];
   }
 
-  public getHistory(): CoreMessage[] {
+  private async handleCompleteGeneration(
+    messages: Message[],
+    tools: ITool[]
+  ): Promise<string> {
+    const response = await this.languageModel.generateText(messages, {
+      tools,
+      maxSteps: this.config.maxSteps,
+      temperature: this.config.temperature,
+      maxTokens: this.config.maxTokens,
+    });
+
+    const responseHandler = ResponseHandlerFactory.createHandler();
+    return responseHandler.handleResponse(response);
+  }
+
+  private async handleStreamGeneration(
+    messages: Message[],
+    tools: ITool[]
+  ): Promise<StreamingResponse> {
+    return await this.languageModel.streamText(messages, {
+      tools,
+      temperature: this.config.temperature,
+      maxTokens: this.config.maxTokens,
+    });
+  }
+
+  private updateMessageHistory(
+    input: string,
+    response: string | StreamingResponse
+  ): void {
+    this.messageHistory.push({ role: "user", content: input });
+    if (typeof response === "string") {
+      this.messageHistory.push({
+        role: "assistant",
+        content: response,
+      });
+    }
+  }
+
+  public clearHistory(): void {
+    this.messageHistory = [];
+    log("Message history cleared");
+  }
+
+  public getHistory(): Message[] {
     return [...this.messageHistory];
   }
 }

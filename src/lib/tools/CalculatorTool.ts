@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { BaseTool } from "./base/BaseTool";
+import { Tool } from "./base/Tool";
+import debug from "debug";
+import { ToolError } from "./errors/ToolError";
+
+const log = debug("tools:calculator");
 
 const CalculatorSchema = z.object({
   operation: z.enum(["add", "subtract", "multiply", "divide"]),
@@ -7,7 +11,9 @@ const CalculatorSchema = z.object({
   b: z.number(),
 });
 
-export class CalculatorTool extends BaseTool<typeof CalculatorSchema> {
+type CalculatorParams = z.infer<typeof CalculatorSchema>;
+
+export class CalculatorTool extends Tool<typeof CalculatorSchema, number> {
   constructor() {
     super(
       {
@@ -21,10 +27,9 @@ export class CalculatorTool extends BaseTool<typeof CalculatorSchema> {
     );
   }
 
-  protected async execute(
-    params: z.infer<typeof CalculatorSchema>
-  ): Promise<number> {
+  protected async executeValidated(params: CalculatorParams): Promise<number> {
     const { operation, a, b } = params;
+    log(`Executing ${operation} operation with a=${a}, b=${b}`);
 
     switch (operation) {
       case "add":
@@ -34,7 +39,9 @@ export class CalculatorTool extends BaseTool<typeof CalculatorSchema> {
       case "multiply":
         return a * b;
       case "divide":
-        if (b === 0) throw new Error("Division by zero");
+        if (b === 0) {
+          throw new ToolError("Division by zero");
+        }
         return a / b;
     }
   }
