@@ -10,6 +10,7 @@ import {
   GenerationResponse,
   LanguageModelConfig,
   OpenAIAssistantLanguageModelConfig,
+  AssistantStreamResponse,
 } from "../interfaces/ILanguageModel";
 import { GenerationOptions, Message } from "../../types/common";
 import { ITool } from "../../tools/interfaces/ITool";
@@ -18,7 +19,9 @@ import { LLMError } from "../errors/LLMError";
 
 const log = debug("llm:openai-assistant");
 
-export class OpenAIAssistantLanguageModel implements ILanguageModel {
+export class OpenAIAssistantLanguageModel
+  implements ILanguageModel<OpenAIAssistantLanguageModelConfig>
+{
   private client: OpenAI;
   private threadId: string | null = null;
 
@@ -50,7 +53,7 @@ export class OpenAIAssistantLanguageModel implements ILanguageModel {
   async streamText(
     messages: Message[],
     options: GenerationOptions & { tools?: ITool[] }
-  ): Promise<Response> {
+  ): Promise<AssistantStreamResponse> {
     log("Streaming text with Assistant API");
 
     const convertedMessages = this.convertMessages(messages);
@@ -98,7 +101,7 @@ export class OpenAIAssistantLanguageModel implements ILanguageModel {
             );
           }
         }
-      ) as Response;
+      );
     } catch (error) {
       const llmError = new LLMError("Failed to stream from Assistant API", {
         cause: error,

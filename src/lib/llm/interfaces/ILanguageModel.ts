@@ -22,9 +22,14 @@ export interface GenerationResponse {
   steps?: GenerationStep[];
 }
 
-export type StreamingResponse =
-  | StreamTextResult<Record<string, CoreTool<any, any>>> // For Portkey and other providers
-  | Response; // For OpenAI Assistants API
+// Define specific stream response types
+export type PortkeyStreamResponse = StreamTextResult<
+  Record<string, CoreTool<any, any>>
+>;
+export type AssistantStreamResponse = Response;
+
+// Union type for all possible streaming responses
+export type StreamingResponse = PortkeyStreamResponse | AssistantStreamResponse;
 
 // Base config with common properties
 interface BaseLanguageModelConfig {
@@ -53,7 +58,18 @@ export type LanguageModelConfig =
   | PortkeyLanguageModelConfig
   | OpenAIAssistantLanguageModelConfig;
 
-export interface ILanguageModel {
+// Map config types to their corresponding stream response types
+export type ConfigToStreamResponse<T extends LanguageModelConfig> =
+  T extends PortkeyLanguageModelConfig
+    ? PortkeyStreamResponse
+    : T extends OpenAIAssistantLanguageModelConfig
+    ? AssistantStreamResponse
+    : never;
+
+// Make ILanguageModel generic with config type only
+export interface ILanguageModel<
+  TConfig extends LanguageModelConfig = LanguageModelConfig
+> {
   generateText(
     messages: Message[],
     options: GenerationOptions & { tools?: ITool[] }
@@ -62,5 +78,11 @@ export interface ILanguageModel {
   streamText(
     messages: Message[],
     options: GenerationOptions & { tools?: ITool[] }
-  ): Promise<StreamingResponse>;
+  ): Promise<
+    TConfig extends PortkeyLanguageModelConfig
+      ? PortkeyStreamResponse
+      : TConfig extends OpenAIAssistantLanguageModelConfig
+      ? AssistantStreamResponse
+      : never
+  >;
 }

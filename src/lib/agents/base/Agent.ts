@@ -2,6 +2,11 @@ import {
   ILanguageModel,
   GenerationResponse,
   StreamingResponse,
+  LanguageModelConfig,
+  PortkeyLanguageModelConfig,
+  OpenAIAssistantLanguageModelConfig,
+  PortkeyStreamResponse,
+  AssistantStreamResponse,
 } from "../../llm/interfaces/ILanguageModel";
 import { ITool, IToolRegistry } from "../../tools/interfaces/ITool";
 import { Message, GenerationOptions } from "../../types/common";
@@ -21,12 +26,19 @@ export interface AgentConfig {
   maxSteps?: number;
 }
 
-export class Agent {
+// Define a utility type for determining the response type
+type AgentResponseType<TConfig> = TConfig extends PortkeyLanguageModelConfig
+  ? PortkeyStreamResponse
+  : TConfig extends OpenAIAssistantLanguageModelConfig
+  ? AssistantStreamResponse
+  : never;
+
+export class Agent<TConfig extends LanguageModelConfig> {
   private messageHistory: Message[] = [];
 
   constructor(
     private readonly config: AgentConfig,
-    private readonly languageModel: ILanguageModel,
+    private readonly languageModel: ILanguageModel<TConfig>,
     private readonly toolRegistry: IToolRegistry
   ) {
     log("Initializing agent:", config.name);
@@ -35,7 +47,7 @@ export class Agent {
   public async process(
     input: string,
     options: GenerationOptions = {}
-  ): Promise<string | StreamingResponse> {
+  ): Promise<string | AgentResponseType<TConfig>> {
     log(`Processing input: "${input}"`);
     const messages = this.prepareMessages(input);
     const tools = Array.from(this.toolRegistry.getTools().values());
@@ -83,7 +95,7 @@ export class Agent {
   private async handleStreamGeneration(
     messages: Message[],
     tools: ITool[]
-  ): Promise<StreamingResponse> {
+  ): Promise<AgentResponseType<TConfig>> {
     return await this.languageModel.streamText(messages, {
       tools,
       temperature: this.config.temperature,
@@ -93,7 +105,7 @@ export class Agent {
 
   private updateMessageHistory(
     input: string,
-    response: string | StreamingResponse
+    response: string | AgentResponseType<TConfig>
   ): void {
     this.messageHistory.push({ role: "user", content: input });
     if (typeof response === "string") {

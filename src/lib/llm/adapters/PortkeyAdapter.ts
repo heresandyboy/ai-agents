@@ -9,9 +9,9 @@ import {
 import {
   ILanguageModel,
   GenerationResponse,
-  // StreamResponse,
   LanguageModelConfig,
   PortkeyLanguageModelConfig,
+  PortkeyStreamResponse,
 } from "../interfaces/ILanguageModel";
 import { Message, GenerationOptions } from "../../types/common";
 import { ITool } from "../../tools/interfaces/ITool";
@@ -20,7 +20,9 @@ import { LLMError } from "../errors/LLMError";
 
 const log = debug("llm:portkey");
 
-export class PortkeyLanguageModel implements ILanguageModel {
+export class PortkeyLanguageModel
+  implements ILanguageModel<PortkeyLanguageModelConfig>
+{
   private client: ReturnType<typeof createPortkey>;
 
   constructor(private config: PortkeyLanguageModelConfig) {
@@ -127,7 +129,7 @@ export class PortkeyLanguageModel implements ILanguageModel {
   async streamText(
     messages: Message[],
     options: GenerationOptions & { tools?: ITool[] }
-  ): Promise<StreamTextResult<Record<string, CoreTool<any, any>>>> {
+  ): Promise<PortkeyStreamResponse> {
     log("Streaming text with options:", options);
 
     const vercelTools = this.convertToolsToVercelFormat(options.tools);
