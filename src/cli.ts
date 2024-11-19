@@ -25,17 +25,17 @@ const rl = readline.createInterface({
 async function main() {
   log("Starting Math Assistant CLI");
 
-  // // For Portkey
+  // =================== Portkey/Generic Language Model ===================
   const config: PortkeyLanguageModelConfig = {
     llmRouterProvider: "portkey" as const,
     llmProvider: "openai" as const,
     routerApiKey: process.env.PORTKEY_API_KEY!,
-    providerApiKey: process.env.OPENAI_API_KEY!,
+    providerApiKey: process.env.OPENAI_API_KEY_TESTING!,
     model: "gpt-4o-mini",
     temperature: 0.7,
   };
 
-  const languageModel = LanguageModelFactory.create(config);
+  const languageModel = LanguageModelFactory.createGenericLLM(config);
 
   const toolRegistry = new ToolRegistry();
   toolRegistry.register(new CalculatorTool());
@@ -54,21 +54,26 @@ async function main() {
     // todo RAG sources, either seperate from tools as as an actual tool. Need more thinking.
   );
 
+  // =================== Assistant API as 'Language Model' ===================
+
   const assistantConfig: OpenAIAssistantLanguageModelConfig = {
+    assistantId: process.env.GENERATED_OPENAI_ASSISTANT_ID!, // TODO: AA - This needs to be optional, to create one, then some way to update the real ID - no idea yet (manual urgh)
     llmRouterProvider: "openai-assistant",
-    assistantId: process.env.OPENAI_ASSISTANT_ID!,
-    providerApiKey: process.env.OPENAI_API_KEY!,
+    name: "Math Assistant",
+    description: "A helpful math assistant",
+    instructions:
+      "You are a helpful math assistant. You can perform calculations using the calculator tool. Always show your work and explain your thinking.",
+    providerApiKey: process.env.OPENAI_API_KEY_TESTING!,
     model: "gpt-4o-mini",
     temperature: 0.1,
   };
 
-  const assistantLanguageModel = LanguageModelFactory.create(assistantConfig);
+  const assistantLanguageModel =
+    LanguageModelFactory.createOpenAIAssistant(assistantConfig);
 
   const assistantAgent = new Agent(
     {
       name: "Math Assistant",
-      systemPrompt: `You are a helpful math assistant. You can perform calculations using the calculator tool. 
-                    Always show your work and explain your thinking.`,
       maxSteps: 5,
       temperature: 0.1,
     },

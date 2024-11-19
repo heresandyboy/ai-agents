@@ -6,9 +6,11 @@ import { ToolError } from "./errors/ToolError";
 const log = debug("tools:calculator");
 
 const CalculatorSchema = z.object({
-  operation: z.enum(["add", "subtract", "multiply", "divide"]),
-  a: z.number(),
-  b: z.number(),
+  operation: z
+    .enum(["add", "subtract", "multiply", "divide"])
+    .describe("The mathematical operation to perform"),
+  a: z.number().describe("The first number in the operation"),
+  b: z.number().describe("The second number in the operation"),
 });
 
 type CalculatorParams = z.infer<typeof CalculatorSchema>;

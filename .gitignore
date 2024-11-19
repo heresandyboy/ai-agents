@@ -45,3 +45,8 @@ coverage/
 .cache/
 
 scratch/
+
+# next.js
+.next/
+out/
+build

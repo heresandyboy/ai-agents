@@ -20,7 +20,7 @@ const log = debug("agent:main");
 
 export interface AgentConfig {
   name: string;
-  systemPrompt: string;
+  systemPrompt?: string;
   temperature?: number;
   maxTokens?: number;
   maxSteps?: number;
@@ -68,13 +68,16 @@ export class Agent<TConfig extends LanguageModelConfig> {
   }
 
   private prepareMessages(input: string): Message[] {
-    const messages = [
-      { role: "system", content: this.config.systemPrompt },
-      ...this.messageHistory,
-      { role: "user", content: input },
-    ];
+    const messages: Message[] = [];
+
+    if (this.config.systemPrompt) {
+      messages.push({ role: "system", content: this.config.systemPrompt });
+    }
+
+    messages.push(...this.messageHistory, { role: "user", content: input });
+
     log("Prepared messages for LLM");
-    return messages as Message[];
+    return messages;
   }
 
   private async handleCompleteGeneration(

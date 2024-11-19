@@ -34,7 +34,7 @@ export type StreamingResponse = PortkeyStreamResponse | AssistantStreamResponse;
 // Base config with common properties
 interface BaseLanguageModelConfig {
   providerApiKey: string;
-  model?: string;
+  model: string;
   temperature?: number;
   maxTokens?: number;
 }
@@ -50,7 +50,10 @@ export interface PortkeyLanguageModelConfig extends BaseLanguageModelConfig {
 export interface OpenAIAssistantLanguageModelConfig
   extends BaseLanguageModelConfig {
   llmRouterProvider: "openai-assistant";
-  assistantId: string;
+  name: string;
+  description: string;
+  instructions: string;
+  assistantId?: string;
 }
 
 // Union type for all possible configs
