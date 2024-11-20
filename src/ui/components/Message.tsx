@@ -2,6 +2,7 @@
 
 import { FC } from 'react';
 import { Message } from 'ai/react';
+import { Markdown } from './Markdown';
 
 interface MessageProps {
   message: Message;
@@ -28,7 +29,9 @@ const MessageComponent: FC<MessageProps> = ({ message }) => {
       <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
         {message.role.charAt(0).toUpperCase() + message.role.slice(1)}
       </p>
-      <p className="text-gray-900 dark:text-gray-100">{message.content}</p>
+      <div className="prose dark:prose-invert">
+        <Markdown>{message.content}</Markdown>
+      </div>
       {message.toolInvocations?.map((tool: ToolInvocation) => (
         <div 
           key={tool.toolCallId} 
