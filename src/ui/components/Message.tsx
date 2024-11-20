@@ -1,6 +1,6 @@
 'use client';
 
-import { FC, useRef, useState, useEffect } from 'react';
+import { FC, useRef, useState, useEffect, useCallback } from 'react';
 import { Message } from 'ai';
 import { Markdown } from './Markdown';
 import { motion } from 'framer-motion';
@@ -35,17 +35,21 @@ const MessageComponent: FC<MessageProps> = ({ message }) => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   };
 
+  // Memoized Intersection Observer callback
+  const handleIntersection = useCallback(
+    (entries: IntersectionObserverEntry[]) => {
+      const [entry] = entries;
+      setIsInView(entry.isIntersecting);
+    },
+    []
+  );
+
   // Use IntersectionObserver to detect when the message is in view
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        setIsInView(entry.isIntersecting);
-      },
-      {
-        root: null,
-        threshold: 0.1, // Adjust as needed
-      }
-    );
+    const observer = new IntersectionObserver(handleIntersection, {
+      root: null,
+      threshold: 0.1, // Adjust as needed
+    });
 
     if (messageRef.current) {
       observer.observe(messageRef.current);
@@ -55,8 +59,9 @@ const MessageComponent: FC<MessageProps> = ({ message }) => {
       if (messageRef.current) {
         observer.unobserve(messageRef.current);
       }
+      observer.disconnect();
     };
-  }, []);
+  }, [handleIntersection]);
 
   return (
     <motion.div
@@ -65,8 +70,8 @@ const MessageComponent: FC<MessageProps> = ({ message }) => {
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.3, ease: 'easeOut' }}
       className={`relative p-4 my-2 rounded-lg ${
-        message.role === 'user' 
-          ? 'bg-blue-100 dark:bg-blue-800/30' 
+        message.role === 'user'
+          ? 'bg-blue-100 dark:bg-blue-800/30'
           : 'bg-gray-100 dark:bg-gray-800'
       }`}
     >
@@ -80,8 +85,8 @@ const MessageComponent: FC<MessageProps> = ({ message }) => {
         <Markdown>{message.content}</Markdown>
       </div>
       {message.toolInvocations?.map((tool: ToolInvocation) => (
-        <div 
-          key={tool.toolCallId} 
+        <div
+          key={tool.toolCallId}
           className="mt-3 p-3 border-l-4 border-spark-purple bg-gray-50 dark:bg-gray-900 rounded"
         >
           <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -106,7 +111,10 @@ const MessageComponent: FC<MessageProps> = ({ message }) => {
 
       {/* Pinned Scroll Buttons */}
       {isInView && (
-        <div className="sticky bottom-4 flex justify-end" style={{ pointerEvents: 'none' }}>
+        <div
+          className="sticky bottom-4 flex justify-end"
+          style={{ pointerEvents: 'none' }}
+        >
           <div className="space-x-2" style={{ pointerEvents: 'auto' }}>
             <button
               onClick={scrollToTopOfMessage}

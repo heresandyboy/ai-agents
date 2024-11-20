@@ -27,6 +27,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
 
   const [isScrollable, setIsScrollable] = useState(false);
 
+  const [isAtBottom, setIsAtBottom] = useState(true);
+
   const scrollToTop = () => {
     topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
@@ -35,9 +37,34 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
+  // Function to check if the user is near the bottom
+  const handleScroll = () => {
+    if (!containerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
+    const atBottom =
+      scrollHeight - scrollTop - clientHeight < 100; // 100px threshold
+    setIsAtBottom(atBottom);
+  };
+
   useEffect(() => {
-    // Scroll to bottom when messages change
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const container = containerRef.current;
+    if (container) {
+      container.addEventListener('scroll', handleScroll);
+      // Initial check
+      handleScroll();
+    }
+    return () => {
+      if (container) {
+        container.removeEventListener('scroll', handleScroll);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    // Only scroll if the user is at the bottom
+    if (isAtBottom) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
 
     // Check if scrolling is needed
     const container = containerRef.current;
@@ -46,7 +73,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
         container.scrollHeight > container.clientHeight;
       setIsScrollable(isContentScrollable);
     }
-  }, [messages]);
+  }, [messages, isAtBottom]);
 
   return (
     <div className="relative flex flex-col h-full">
@@ -77,7 +104,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
       </div>
 
       {/* Bottom Scroll Button */}
-      {isScrollable && (
+      {isScrollable && !isAtBottom && (
         <button
           onClick={scrollToBottom}
           className="absolute bottom-24 right-4 p-2 bg-white dark:bg-gray-800 rounded-full shadow hover:bg-gray-100 dark:hover:bg-gray-700 z-30"
