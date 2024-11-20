@@ -4,9 +4,12 @@ import { useRef, useEffect } from 'react';
 import { useChat } from 'ai/react';
 import MessageComponent from './Message';
 import { Send } from 'lucide-react';
-import { useFormState } from 'react-dom';
 
-const ChatWindow = () => {
+interface ChatWindowProps {
+  isSidebarOpen: boolean;
+}
+
+const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
   const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat({
     api: '/api/chat',
     maxSteps: 5,
@@ -19,19 +22,22 @@ const ChatWindow = () => {
   }, [messages]);
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] pt-16">
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+    <div className="flex flex-col h-full">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 pt-20 pb-24">
         {messages.map((msg) => (
           <MessageComponent key={msg.id} message={msg} />
         ))}
         <div ref={messagesEndRef} />
       </div>
-      
-      <form 
+
+      <form
         onSubmit={handleSubmit}
-        className="border-t border-spark-border dark:border-spark-border-dark p-4 bg-white dark:bg-gray-900"
+        className={`fixed bottom-0 ${
+          isSidebarOpen ? 'left-64' : 'left-0'
+        } right-0 border-t border-spark-border dark:border-spark-border-dark p-4 bg-white dark:bg-gray-900`}
+        style={{ zIndex: 10 }}
       >
-        <div className="flex space-x-4">
+        <div className="flex space-x-4 max-w-4xl mx-auto">
           <input
             type="text"
             value={input}

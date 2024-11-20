@@ -1,8 +1,9 @@
 'use client';
 
 import { FC } from 'react';
-import { Message } from 'ai/react';
+import { Message } from 'ai';
 import { Markdown } from './Markdown';
+import { motion } from 'framer-motion';
 
 interface MessageProps {
   message: Message;
@@ -19,7 +20,10 @@ interface ToolInvocation {
 
 const MessageComponent: FC<MessageProps> = ({ message }) => {
   return (
-    <div 
+    <motion.div
+      initial={{ y: 5, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ duration: 0.3, ease: 'easeOut' }}
       className={`p-4 my-2 rounded-lg ${
         message.role === 'user' 
           ? 'bg-blue-100 dark:bg-blue-800/30' 
@@ -53,7 +57,7 @@ const MessageComponent: FC<MessageProps> = ({ message }) => {
           )}
         </div>
       ))}
-    </div>
+    </motion.div>
   );
 };
 
