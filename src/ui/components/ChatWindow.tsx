@@ -63,7 +63,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
 
       <div
         ref={containerRef}
-        className="flex-1 overflow-y-auto p-4 space-y-4 pt-20 pb-24"
+        className="flex-1 overflow-y-auto p-4 pr-20 space-y-4 pt-20 pb-24"
       >
         {/* Top of the messages with adjusted scroll margin */}
         <div ref={topRef} className="scroll-mt-16" />
