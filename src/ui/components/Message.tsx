@@ -1,3 +1,5 @@
+'use client';
+
 import { FC } from 'react';
 import { Message } from 'ai/react';
 
