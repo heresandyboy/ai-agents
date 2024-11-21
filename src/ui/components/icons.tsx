@@ -17,7 +17,7 @@ export const BotIcon = () => {
   );
 };
 
-export const UserIcon = () => {
+export const UserIcon = () => 
   return (
     <svg
       data-testid="geist-icon"

@@ -2,6 +2,7 @@ import '@/styles/globals.css';
 import { Inter } from 'next/font/google';
 import NavBar from '@/components/NavBar';
 import { CustomThemeProvider } from '@/components/ThemeProvider';
+import { SettingsProvider } from '@/context/SettingsContext';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -44,7 +45,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className={`${inter.className} h-screen antialiased`}>
         <CustomThemeProvider>
+        <SettingsProvider>
           {children}
+        </SettingsProvider>
         </CustomThemeProvider>
       </body>
     </html>

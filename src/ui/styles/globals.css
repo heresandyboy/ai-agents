@@ -10,6 +10,7 @@ html, body {
   :root {
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
+    --font-size-base: 16px;
   }
 
   .dark {
@@ -19,6 +20,11 @@ html, body {
 
   body {
     @apply antialiased;
+    font-size: var(--font-size-base);
+  }
+
+  .prose {
+    font-size: var(--font-size-base);
   }
 }
 
@@ -42,4 +48,17 @@ html, body {
 /* Smooth transitions for theme switching */
 * {
   @apply transition-colors duration-200;
+}
+
+/* Add these utility classes */
+.text-scale {
+  font-size: calc(var(--font-size-base) * 1);
+}
+
+.text-scale-sm {
+  font-size: calc(var(--font-size-base) * 0.875);
+}
+
+.text-scale-lg {
+  font-size: calc(var(--font-size-base) * 1.125);
 }

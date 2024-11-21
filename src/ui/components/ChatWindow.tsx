@@ -6,6 +6,7 @@ import MessageComponent from './Message';
 import { Send, ArrowUp, ArrowDown } from 'lucide-react';
 import { useStreamingData } from '@/hooks/useStreamingData';
 import ChatInput from './ChatInput';
+import { useSettings } from '@/context/SettingsContext';
 
 interface ChatWindowProps {
   isSidebarOpen: boolean;
@@ -20,6 +21,15 @@ function debounce(func: Function, wait: number) {
 }
 
 const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
+  const { fontSize } = useSettings();
+
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      '--font-size-base',
+      `${fontSize}px`
+    );
+  }, [fontSize]);
+
   const {
     messages,
     setMessages,

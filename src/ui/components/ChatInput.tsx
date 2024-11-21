@@ -1,8 +1,9 @@
-import React, { useRef, useEffect, ChangeEvent } from 'react';
-import { Send, X } from 'lucide-react';
-// import { Textarea } from './ui/textarea'; // Assuming you have a Textarea component
+import React, { useRef, useEffect, ChangeEvent, useState } from 'react';
+import { Send, X, Settings } from 'lucide-react';
 import { clsx } from 'clsx';
 import { Textarea } from './ui/textarea';
+import { useSettings } from '@/context/SettingsContext';
+import { SettingsPopover } from './SettingsPopover';
 
 interface ChatInputProps {
   input: string;
@@ -22,8 +23,13 @@ const ChatInput: React.FC<ChatInputProps> = ({
   isSidebarOpen,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { fontSize } = useSettings();
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  // Adjust the height of the textarea based on content
+  useEffect(() => {
+    document.documentElement.style.setProperty('--font-size-base', `${fontSize}px`);
+  }, [fontSize]);
+
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -31,7 +37,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
     }
   }, [input]);
 
-  // Handle input change and adjust height
   const onInputChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     handleInputChange(event);
   };
@@ -45,13 +50,29 @@ const ChatInput: React.FC<ChatInputProps> = ({
         'border-spark-border dark:border-spark-border-dark'
       )}
     >
-      <div className="flex items-end space-x-4 max-w-4xl mx-auto">
+      <div className="relative flex items-center space-x-4 max-w-4xl mx-auto">
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+            className="p-2 bg-white dark:bg-gray-800 rounded-full shadow hover:bg-gray-100 dark:hover:bg-gray-700"
+            aria-label="Settings"
+          >
+            <Settings className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+          </button>
+          {isSettingsOpen && (
+            <div className="absolute bottom-full mb-2 right-0">
+              <SettingsPopover />
+            </div>
+          )}
+        </div>
+
         <Textarea
           ref={textareaRef}
           value={input}
           onChange={onInputChange}
           placeholder="Type your message..."
-          className="flex-1 p-2 border rounded-lg resize-none overflow-hidden
+          className="text-scale flex-1 p-2 border rounded-lg resize-none overflow-hidden
                      dark:border-gray-700 bg-white dark:bg-gray-800
                      text-gray-900 dark:text-gray-100
                      focus:ring-2 focus:ring-spark-purple focus:border-transparent
