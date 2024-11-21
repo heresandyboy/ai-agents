@@ -44,7 +44,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className={`${inter.className} h-screen antialiased`}>
         <CustomThemeProvider>
-          <NavBar />
           {children}
         </CustomThemeProvider>
       </body>

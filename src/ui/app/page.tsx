@@ -6,7 +6,7 @@ import Sidebar from '@/components/Sidebar';
 import NavBar from '@/components/NavBar';
 
 export default function Home() {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const toggleSidebar = () => {
     setIsSidebarOpen(!isSidebarOpen);
