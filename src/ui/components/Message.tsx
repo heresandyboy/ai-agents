@@ -1,12 +1,12 @@
 'use client';
 
-import { FC, useRef, useState, useEffect, useCallback } from 'react';
+import React, { FC, useRef, useState, useEffect, useCallback, memo, useMemo } from 'react';
 import { Message } from 'ai';
 import { Markdown } from './Markdown';
 import { motion } from 'framer-motion';
 import { ArrowUp, ArrowDown } from 'lucide-react';
 
-// Update the interface to include proper tool invocation types
+// Define the types for tool invocations if applicable
 interface ToolInvocation {
   toolName: string;
   toolCallId: string;
@@ -17,9 +17,10 @@ interface ToolInvocation {
 
 interface MessageProps {
   message: Message;
+  isLoading?: boolean;
 }
 
-const MessageComponent: FC<MessageProps> = ({ message }) => {
+const MessageComponent: FC<MessageProps> = ({ message, isLoading }) => {
   const messageRef = useRef<HTMLDivElement>(null);
   const topRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -27,13 +28,21 @@ const MessageComponent: FC<MessageProps> = ({ message }) => {
   const [isInView, setIsInView] = useState(false);
 
   // Functions to scroll to the top or bottom of the message
-  const scrollToTopOfMessage = () => {
-    topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
+  const scrollToTopOfMessage = useCallback(() => {
+    if (topRef.current) {
+      requestAnimationFrame(() => {
+        topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
+  }, []);
 
-  const scrollToBottomOfMessage = () => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  };
+  const scrollToBottomOfMessage = useCallback(() => {
+    if (bottomRef.current) {
+      requestAnimationFrame(() => {
+        bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      });
+    }
+  }, []);
 
   // Memoized Intersection Observer callback
   const handleIntersection = useCallback(
@@ -63,6 +72,11 @@ const MessageComponent: FC<MessageProps> = ({ message }) => {
     };
   }, [handleIntersection]);
 
+  // Only display scroll buttons when the message is not streaming
+  const shouldShowScrollButtons = useMemo(() => {
+    return !isLoading;
+  }, [isLoading]);
+
   return (
     <motion.div
       ref={messageRef}
@@ -84,7 +98,9 @@ const MessageComponent: FC<MessageProps> = ({ message }) => {
       <div className="prose dark:prose-invert">
         <Markdown>{message.content}</Markdown>
       </div>
-      {message.toolInvocations?.map((tool: ToolInvocation) => (
+
+      {/* Render tool invocations if present */}
+      {'toolInvocations' in message && message.toolInvocations?.map((tool: ToolInvocation) => (
         <div
           key={tool.toolCallId}
           className="mt-3 p-3 border-l-4 border-spark-purple bg-gray-50 dark:bg-gray-900 rounded"
@@ -110,7 +126,7 @@ const MessageComponent: FC<MessageProps> = ({ message }) => {
       <div ref={bottomRef} className="scroll-mb-24" />
 
       {/* Pinned Scroll Buttons */}
-      {isInView && (
+      {shouldShowScrollButtons && isInView && (
         <div
           className="sticky bottom-4 flex justify-end"
           style={{ pointerEvents: 'none' }}
@@ -137,4 +153,11 @@ const MessageComponent: FC<MessageProps> = ({ message }) => {
   );
 };
 
-export default MessageComponent;
+// Memoize the component to prevent unnecessary re-renders
+export default memo(
+  MessageComponent,
+  (prevProps, nextProps) =>
+    prevProps.message.id === nextProps.message.id &&
+    prevProps.message.content === nextProps.message.content &&
+    prevProps.isLoading === nextProps.isLoading
+);

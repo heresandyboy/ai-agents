@@ -1,21 +1,34 @@
 'use client';
 
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import { useChat } from 'ai/react';
 import MessageComponent from './Message';
 import { Send, ArrowUp, ArrowDown } from 'lucide-react';
+import { useStreamingData } from '@/hooks/useStreamingData';
+import ChatInput from './ChatInput';
 
 interface ChatWindowProps {
   isSidebarOpen: boolean;
 }
 
+function debounce(func: Function, wait: number) {
+  let timeout: NodeJS.Timeout;
+  return function (...args: any[]) {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  };
+}
+
 const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
   const {
     messages,
+    setMessages,
     input,
     handleInputChange,
     handleSubmit,
     isLoading,
+    data: streamingData,
+    stop,
   } = useChat({
     api: '/api/chat',
     maxSteps: 5,
@@ -26,25 +39,34 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [isScrollable, setIsScrollable] = useState(false);
-
   const [isAtBottom, setIsAtBottom] = useState(true);
 
-  const scrollToTop = () => {
-    topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
+  const scrollToTop = useCallback(() => {
+    if (topRef.current) {
+      requestAnimationFrame(() => {
+        topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
+  }, []);
 
-  const scrollToBottom = () => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
+  const scrollToBottom = useCallback(() => {
+    if (bottomRef.current) {
+      requestAnimationFrame(() => {
+        bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
+  }, []);
 
-  // Function to check if the user is near the bottom
-  const handleScroll = () => {
-    if (!containerRef.current) return;
-    const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
-    const atBottom =
-      scrollHeight - scrollTop - clientHeight < 100; // 100px threshold
-    setIsAtBottom(atBottom);
-  };
+  // Debounced handleScroll function
+  const handleScroll = useCallback(
+    debounce(() => {
+      if (!containerRef.current) return;
+      const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
+      const atBottom = scrollHeight - scrollTop - clientHeight < 100; // 100px threshold
+      setIsAtBottom(atBottom);
+    }, 100), // Debounce delay of 100ms
+    []
+  );
 
   useEffect(() => {
     const container = containerRef.current;
@@ -54,26 +76,30 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
       handleScroll();
     }
     return () => {
-      if (container) {
-        container.removeEventListener('scroll', handleScroll);
-      }
+      container?.removeEventListener('scroll', handleScroll);
     };
-  }, []);
+  }, [handleScroll]);
 
   useEffect(() => {
     // Only scroll if the user is at the bottom
     if (isAtBottom) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      requestAnimationFrame(() => {
+        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      });
     }
 
     // Check if scrolling is needed
     const container = containerRef.current;
     if (container) {
-      const isContentScrollable =
-        container.scrollHeight > container.clientHeight;
+      const isContentScrollable = container.scrollHeight > container.clientHeight;
       setIsScrollable(isContentScrollable);
     }
   }, [messages, isAtBottom]);
+
+  useStreamingData(streamingData, setMessages);
+
+  // Memoize messages to prevent unnecessary re-renders
+  const memoizedMessages = useMemo(() => messages, [messages]);
 
   return (
     <div className="relative flex flex-col h-full">
@@ -95,8 +121,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
         {/* Top of the messages with adjusted scroll margin */}
         <div ref={topRef} className="scroll-mt-16" />
 
-        {messages.map((msg) => (
-          <MessageComponent key={msg.id} message={msg} />
+        {memoizedMessages.map((msg, index) => (
+          <MessageComponent
+            key={msg.id}
+            message={msg}
+            isLoading={isLoading && index === messages.length - 1}
+          />
         ))}
 
         {/* Bottom of the messages with adjusted scroll margin */}
@@ -114,36 +144,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
         </button>
       )}
 
-      <form
-        onSubmit={handleSubmit}
-        className={`fixed bottom-0 ${
-          isSidebarOpen ? 'left-64' : 'left-0'
-        } right-0 border-t border-spark-border dark:border-spark-border-dark p-4 bg-white dark:bg-gray-900 z-20`}
-      >
-        <div className="flex space-x-4 max-w-4xl mx-auto">
-          <input
-            type="text"
-            value={input}
-            onChange={handleInputChange}
-            placeholder="Type your message..."
-            className="flex-1 p-2 border rounded-lg dark:border-gray-700 
-                       bg-white dark:bg-gray-800 
-                       text-gray-900 dark:text-gray-100
-                       focus:ring-2 focus:ring-spark-purple focus:border-transparent
-                       transition-colors duration-200"
-            disabled={isLoading}
-          />
-          <button
-            type="submit"
-            disabled={isLoading || !input.trim()}
-            className="px-4 py-2 bg-spark-purple text-white rounded-lg
-                       hover:bg-opacity-90 transition-opacity
-                       disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Send className="h-5 w-5" />
-          </button>
-        </div>
-      </form>
+      <ChatInput
+        input={input}
+        handleInputChange={handleInputChange}
+        handleSubmit={handleSubmit}
+        isLoading={isLoading}
+        stop={stop}
+        isSidebarOpen={isSidebarOpen}
+      />
     </div>
   );
 };
