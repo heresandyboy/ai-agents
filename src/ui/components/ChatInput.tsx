@@ -1,9 +1,10 @@
-import React, { useRef, useEffect, ChangeEvent, useState } from 'react';
+import React, { useRef, useEffect, ChangeEvent, KeyboardEvent, useState } from 'react';
 import { Send, X, Settings } from 'lucide-react';
 import { clsx } from 'clsx';
 import { Textarea } from './ui/textarea';
 import { useSettings } from '@/context/SettingsContext';
 import { SettingsPopover } from './SettingsPopover';
+import Tooltip from './ui/Tooltip';
 
 interface ChatInputProps {
   input: string;
@@ -23,7 +24,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
   isSidebarOpen,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const { fontSize } = useSettings();
+  const { enterToSend } = useSettings();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
@@ -38,6 +39,21 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
   const onInputChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     handleInputChange(event);
+  };
+
+  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (enterToSend) {
+      if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey) {
+        event.preventDefault();
+        handleSubmit();
+      }
+    } else {
+      if (event.key === 'Enter' && (event.ctrlKey || event.shiftKey)) {
+        event.preventDefault();
+        handleSubmit();
+      }
+    }
+    // Allow default behavior (new line) when appropriate
   };
 
   // Close settings popover when clicking outside
@@ -58,6 +74,10 @@ const ChatInput: React.FC<ChatInputProps> = ({
     };
   }, []);
 
+  const sendButtonTooltip = enterToSend
+    ? 'Send message (Enter)'
+    : 'Send message (Ctrl + Enter)';
+
   return (
     <form
       onSubmit={handleSubmit}
@@ -73,10 +93,10 @@ const ChatInput: React.FC<ChatInputProps> = ({
           ref={textareaRef}
           value={input}
           onChange={onInputChange}
+          onKeyDown={onKeyDown}
           placeholder="Type your message..."
           className="text-scale flex-1 p-2 border rounded-lg resize-none overflow-hidden
-                     dark:border-gray-700 bg-white dark:bg-gray-800
-                     text-gray-900 dark:text-gray-100
+                     dark:border-gray-700
                      focus:ring-2 focus:ring-spark-purple focus:border-transparent
                      transition-colors duration-200"
           disabled={isLoading}
@@ -105,7 +125,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
             )}
           </div>
 
-          {/* Send/Stop Button */}
+          {/* Send/Stop Button with Tooltip */}
           {isLoading ? (
             <button
               type="button"
@@ -117,15 +137,18 @@ const ChatInput: React.FC<ChatInputProps> = ({
               <X className="h-5 w-5" />
             </button>
           ) : (
-            <button
-              type="submit"
-              disabled={isLoading || !input.trim()}
-              className="px-4 py-2 bg-spark-purple text-white rounded-lg
-                         hover:bg-opacity-90 transition-opacity
-                         disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Send className="h-5 w-5" />
-            </button>
+            <Tooltip content={sendButtonTooltip}>
+              <button
+                type="submit"
+                disabled={isLoading || !input.trim()}
+                className="px-4 py-2 bg-spark-purple text-white rounded-lg
+                           hover:bg-opacity-90 transition-opacity
+                           disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-label="Send"
+              >
+                <Send className="h-5 w-5" />
+              </button>
+            </Tooltip>
           )}
         </div>
       </div>
