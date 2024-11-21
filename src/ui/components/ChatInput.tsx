@@ -26,9 +26,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const { fontSize } = useSettings();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  useEffect(() => {
-    document.documentElement.style.setProperty('--font-size-base', `${fontSize}px`);
-  }, [fontSize]);
+  const settingsButtonRef = useRef<HTMLButtonElement>(null);
+  const settingsPopoverRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -41,6 +40,24 @@ const ChatInput: React.FC<ChatInputProps> = ({
     handleInputChange(event);
   };
 
+  // Close settings popover when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        settingsPopoverRef.current &&
+        !settingsPopoverRef.current.contains(event.target as Node) &&
+        settingsButtonRef.current &&
+        !settingsButtonRef.current.contains(event.target as Node)
+      ) {
+        setIsSettingsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   return (
     <form
       onSubmit={handleSubmit}
@@ -50,23 +67,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
         'border-spark-border dark:border-spark-border-dark'
       )}
     >
-      <div className="relative flex items-center space-x-4 max-w-4xl mx-auto">
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setIsSettingsOpen(!isSettingsOpen)}
-            className="p-2 bg-white dark:bg-gray-800 rounded-full shadow hover:bg-gray-100 dark:hover:bg-gray-700"
-            aria-label="Settings"
-          >
-            <Settings className="h-5 w-5 text-gray-600 dark:text-gray-300" />
-          </button>
-          {isSettingsOpen && (
-            <div className="absolute bottom-full mb-2 right-0">
-              <SettingsPopover />
-            </div>
-          )}
-        </div>
-
+      <div className="relative flex items-end space-x-4 max-w-4xl mx-auto">
+        {/* Textarea */}
         <Textarea
           ref={textareaRef}
           value={input}
@@ -81,27 +83,51 @@ const ChatInput: React.FC<ChatInputProps> = ({
           rows={1}
         />
 
-        {isLoading ? (
-          <button
-            type="button"
-            onClick={stop}
-            className="px-4 py-2 bg-red-500 text-white rounded-lg
-                       hover:bg-red-600 transition-colors
-                       disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        ) : (
-          <button
-            type="submit"
-            disabled={isLoading || !input.trim()}
-            className="px-4 py-2 bg-spark-purple text-white rounded-lg
-                       hover:bg-opacity-90 transition-opacity
-                       disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Send className="h-5 w-5" />
-          </button>
-        )}
+        <div className="flex flex-col items-center space-y-2">
+          {/* Settings Icon */}
+          <div className="relative">
+            <button
+              ref={settingsButtonRef}
+              type="button"
+              onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+              className="p-2 bg-white dark:bg-gray-800 rounded-full shadow hover:bg-gray-100 dark:hover:bg-gray-700"
+              aria-label="Settings"
+            >
+              <Settings className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+            </button>
+            {isSettingsOpen && (
+              <div
+                ref={settingsPopoverRef}
+                className="absolute bottom-full mb-2 right-0 z-50"
+              >
+                <SettingsPopover onClose={() => setIsSettingsOpen(false)} />
+              </div>
+            )}
+          </div>
+
+          {/* Send/Stop Button */}
+          {isLoading ? (
+            <button
+              type="button"
+              onClick={stop}
+              className="px-4 py-2 bg-red-500 text-white rounded-lg
+                         hover:bg-red-600 transition-colors
+                         disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          ) : (
+            <button
+              type="submit"
+              disabled={isLoading || !input.trim()}
+              className="px-4 py-2 bg-spark-purple text-white rounded-lg
+                         hover:bg-opacity-90 transition-opacity
+                         disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Send className="h-5 w-5" />
+            </button>
+          )}
+        </div>
       </div>
     </form>
   );
