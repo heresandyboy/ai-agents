@@ -11,7 +11,7 @@ interface NavBarProps {
 
 const NavBar: FC<NavBarProps> = ({ isSidebarOpen, toggleSidebar }) => {
   return (
-    <nav className="bg-white dark:bg-gray-900 border-b border-spark-border dark:border-spark-border-dark fixed w-full z-50 top-0">
+    <nav className="bg-[hsl(var(--background))] dark:bg-gray-900 border-b border-spark-border dark:border-spark-border-dark fixed w-full z-50 top-0">
       <div className="flex justify-between h-16 items-center px-4 sm:px-6 lg:px-8">
         <div className="flex items-center">
           <button

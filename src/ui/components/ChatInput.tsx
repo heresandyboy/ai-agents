@@ -82,7 +82,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
     <form
       onSubmit={handleSubmit}
       className={clsx(
-        'fixed bottom-0 right-0 border-t p-4 bg-white dark:bg-gray-900 z-20',
+        'fixed bottom-0 right-0 border-t p-4 bg-[hsl(var(--background))] dark:bg-gray-900 z-20',
         isSidebarOpen ? 'left-64' : 'left-0',
         'border-spark-border dark:border-spark-border-dark'
       )}
@@ -96,7 +96,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
           onKeyDown={onKeyDown}
           placeholder="Type your message..."
           className="text-scale flex-1 p-2 border rounded-lg resize-none overflow-hidden
-                     dark:border-gray-700
+                     border-gray-300 dark:border-gray-700
                      focus:ring-2 focus:ring-spark-purple focus:border-transparent
                      transition-colors duration-200"
           disabled={isLoading}
