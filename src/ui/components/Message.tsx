@@ -5,6 +5,7 @@ import { Message } from 'ai';
 import { Markdown } from './Markdown';
 import { motion } from 'framer-motion';
 import { ArrowUp, ArrowDown } from 'lucide-react';
+import ToolInvocationStatus from './ToolInvocationStatus';
 
 // Define the types for tool invocations if applicable
 interface ToolInvocation {
@@ -99,28 +100,13 @@ const MessageComponent: FC<MessageProps> = ({ message, isLoading }) => {
         <Markdown>{message.content}</Markdown>
       </div>
 
-      {/* Render tool invocations if present */}
-      {'toolInvocations' in message && message.toolInvocations?.map((tool: ToolInvocation) => (
-        <div
-          key={tool.toolCallId}
-          className="mt-3 p-3 border-l-4 border-spark-purple bg-gray-50 dark:bg-gray-900 rounded"
-        >
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Tool: {tool.toolName}
-          </p>
-          <pre className="mt-2 text-sm bg-gray-100 dark:bg-gray-800 p-2 rounded overflow-x-auto">
-            {JSON.stringify(tool.args, null, 2)}
-          </pre>
-          {tool.state === 'result' && (
-            <div className="mt-2 p-2 bg-gray-100 dark:bg-gray-800 rounded">
-              <p className="text-sm text-gray-600 dark:text-gray-400">Result:</p>
-              <pre className="mt-1 text-sm overflow-x-auto">
-                {JSON.stringify(tool.result, null, 2)}
-              </pre>
-            </div>
-          )}
-        </div>
-      ))}
+      {/* Tool Invocation Status */}
+      {message.toolInvocations && (
+        <ToolInvocationStatus
+          toolInvocations={message.toolInvocations}
+          isLoading={isLoading || false}
+        />
+      )}
 
       {/* Bottom of the message with adjusted scroll margin */}
       <div ref={bottomRef} className="scroll-mb-24" />
