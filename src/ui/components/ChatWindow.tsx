@@ -4,9 +4,9 @@ import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import { useChat } from 'ai/react';
 import MessageComponent from './Message';
 import { Send, ArrowUp, ArrowDown } from 'lucide-react';
-import { useStreamingData } from '@/hooks/useStreamingData';
 import ChatInput from './ChatInput';
 import { useSettings } from '@/context/SettingsContext';
+import { useStreamingData } from '@/hooks/useStreamingData';
 
 interface ChatWindowProps {
   isSidebarOpen: boolean;

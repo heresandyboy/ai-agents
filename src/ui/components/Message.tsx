@@ -6,22 +6,17 @@ import { Markdown } from './Markdown';
 import { motion } from 'framer-motion';
 import { ArrowUp, ArrowDown } from 'lucide-react';
 import ToolInvocationStatus from './ToolInvocationStatus';
-
-// Define the types for tool invocations if applicable
-interface ToolInvocation {
-  toolName: string;
-  toolCallId: string;
-  state?: string;
-  args: any;
-  result?: any;
-}
+import cx from 'classnames';
+import { Weather } from './tool/Weather';
 
 interface MessageProps {
   message: Message;
   isLoading?: boolean;
+  block?: any;
+  setBlock?: React.Dispatch<React.SetStateAction<any>>;
 }
 
-const MessageComponent: FC<MessageProps> = ({ message, isLoading }) => {
+const MessageComponent: FC<MessageProps> = ({ message, isLoading, block, setBlock }) => {
   const messageRef = useRef<HTMLDivElement>(null);
   const topRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -106,6 +101,43 @@ const MessageComponent: FC<MessageProps> = ({ message, isLoading }) => {
           toolInvocations={message.toolInvocations}
           isLoading={isLoading || false}
         />
+      )}
+
+      {/* Tool Invocation Handling */}
+      {message.toolInvocations && message.toolInvocations.length > 0 && (
+        <div className="flex flex-col gap-4 mt-4">
+          {message.toolInvocations.map((toolInvocation) => {
+            const { toolName, toolCallId, state, args } = toolInvocation;
+
+            if (state === 'result') {
+              const { result } = toolInvocation;
+
+              return (
+                <div key={toolCallId}>
+                  {toolName === 'getWeather' ? (
+                    <Weather weatherAtLocation={result} />
+                  ) : (
+                    <pre>{JSON.stringify(result, null, 2)}</pre>
+                  )}
+                </div>
+              );
+            }
+
+            // While the tool is running (state is not 'result')
+            return (
+              <div
+                key={toolCallId}
+                className={cx({
+                  skeleton: ['getWeather'].includes(toolName),
+                })}
+              >
+                {toolName === 'getWeather' ? (
+                  <Weather />
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
       )}
 
       {/* Bottom of the message with adjusted scroll margin */}
