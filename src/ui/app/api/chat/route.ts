@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
   const coreMessages = convertToCoreMessages(messages);
 
   const response = await streamText({
-    model: openai("gpt-4"),
+    model: openai("gpt-4o-mini"),
     messages: coreMessages,
     tools: {
       getWeather: {
