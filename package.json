@@ -12,7 +12,8 @@
     "start": "npm run build && node dist/index.js",
     "gateway": "npx @portkey-ai/gateway",
     "deps-windows": "choco install imagemagick",
-    "cli": "ts-node src/cli.ts"
+    "cli": "ts-node src/cli.ts",
+    "dev": "ts-node src/main.ts"
   },
   "dependencies": {
     "@portkey-ai/vercel-provider": "^1.0.1",
@@ -23,6 +24,7 @@
     "keysender": "^2.3.0",
     "langfuse": "^3.28.0",
     "lru-cache": "^11.0.1",
+    "openai": "^4.73.1",
     "portkey-ai": "^1.5.1",
     "screenshot-desktop": "^1.15.0",
     "ts-node": "^10.9.2",

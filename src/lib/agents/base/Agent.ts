@@ -20,6 +20,8 @@ const log = debug("agent:main");
 
 export interface AgentConfig {
   name: string;
+  description: string;
+  capabilities?: string[];
   systemPrompt?: string;
   temperature?: number;
   maxTokens?: number;
@@ -44,18 +46,30 @@ export class Agent<TConfig extends LanguageModelConfig> {
     log("Initializing agent:", config.name);
   }
 
+  public getName(): string {
+    return this.config.name;
+  }
+
+  public getDescription(): string {
+    return this.config.description;
+  }
+
+  public getCapabilities(): string[] {
+    return this.config.capabilities || [];
+  }
+
   public async process(
     input: string,
     options: GenerationOptions = {}
-  ): Promise<string | AgentResponseType<TConfig>> {
+  ): Promise<string | GenerationResponse | AgentResponseType<TConfig>> {
     log(`Processing input: "${input}"`);
     const messages = this.prepareMessages(input);
     const tools = Array.from(this.toolRegistry.getTools().values());
 
     try {
       const response = options.stream
-        ? await this.handleStreamGeneration(messages, tools)
-        : await this.handleCompleteGeneration(messages, tools);
+        ? await this.handleStreamGeneration(messages, tools, options)
+        : await this.handleCompleteGeneration(messages, tools, options);
       if (typeof response === "string") {
         this.updateMessageHistory(input, response);
       }
@@ -63,6 +77,22 @@ export class Agent<TConfig extends LanguageModelConfig> {
       return response;
     } catch (error) {
       log("Error during processing:", error);
+      throw new AgentError("Processing failed", { cause: error });
+    }
+  }
+
+  public async processMessages(
+    messages: Message[],
+    options: GenerationOptions = {}
+  ): Promise<string | GenerationResponse | AgentResponseType<TConfig>> {
+    const tools = Array.from(this.toolRegistry.getTools().values());
+
+    try {
+      const response = options.stream
+        ? await this.handleStreamGeneration(messages, tools, options)
+        : await this.handleCompleteGeneration(messages, tools, options);
+      return response;
+    } catch (error) {
       throw new AgentError("Processing failed", { cause: error });
     }
   }
@@ -82,39 +112,49 @@ export class Agent<TConfig extends LanguageModelConfig> {
 
   private async handleCompleteGeneration(
     messages: Message[],
-    tools: ITool[]
-  ): Promise<string> {
+    tools: ITool[],
+    options: GenerationOptions
+  ): Promise<string | GenerationResponse> {
     const response = await this.languageModel.generateText(messages, {
       tools,
-      maxSteps: this.config.maxSteps,
-      temperature: this.config.temperature,
-      maxTokens: this.config.maxTokens,
+      toolChoice: options.toolChoice,
+      maxSteps: options.maxSteps ?? this.config.maxSteps,
+      temperature: options.temperature ?? this.config.temperature,
+      maxTokens: options.maxTokens ?? this.config.maxTokens,
     });
 
     const responseHandler = ResponseHandlerFactory.createHandler();
+    console.warn("Response", JSON.stringify(response, null, 2));
     return responseHandler.handleResponse(response);
   }
 
   private async handleStreamGeneration(
     messages: Message[],
-    tools: ITool[]
+    tools: ITool[],
+    options: GenerationOptions
   ): Promise<AgentResponseType<TConfig>> {
     return await this.languageModel.streamText(messages, {
       tools,
-      temperature: this.config.temperature,
-      maxTokens: this.config.maxTokens,
+      toolChoice: options.toolChoice,
+      temperature: options.temperature ?? this.config.temperature,
+      maxTokens: options.maxTokens ?? this.config.maxTokens,
     });
   }
 
   private updateMessageHistory(
     input: string,
-    response: string | AgentResponseType<TConfig>
+    response: string | GenerationResponse | AgentResponseType<TConfig>
   ): void {
     this.messageHistory.push({ role: "user", content: input });
     if (typeof response === "string") {
       this.messageHistory.push({
         role: "assistant",
         content: response,
+      });
+    } else if ("text" in response) {
+      this.messageHistory.push({
+        role: "assistant",
+        content: response.text.toString(),
       });
     }
   }
@@ -126,5 +166,9 @@ export class Agent<TConfig extends LanguageModelConfig> {
 
   public getHistory(): Message[] {
     return [...this.messageHistory];
+  }
+
+  public setSystemPrompt(systemPrompt: string): void {
+    this.config.systemPrompt = systemPrompt;
   }
 }

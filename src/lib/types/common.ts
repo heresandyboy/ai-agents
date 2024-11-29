@@ -25,6 +25,11 @@ export interface GenerationOptions {
   temperature?: number;
   maxTokens?: number;
   maxSteps?: number;
+  toolChoice?:
+    | "auto"
+    | "none"
+    | "required"
+    | { type: "tool"; toolName: string };
 }
 
 export interface ToolCall {
