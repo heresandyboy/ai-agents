@@ -1,10 +1,30 @@
-// lib/index.ts
-export * from "./agents/base/Agent";
-export * from "./agents/classification/AgentClassifier";
-export * from "./agents/orchestration/AgentOrchestrator";
-export * from "./llm/factories/LanguageModelFactory";
-export * from "./tools/registry/ToolRegistry";
-export * from "./tools/WeatherTool";
-export * from "./tools/CalculatorTool";
-export * from "./types/common";
-export * from "./llm/interfaces/ILanguageModel";
+// Core exports
+export * from "./agents";
+export * from "./llm";
+export * from "./tools";
+export * from "./types";
+
+// Type exports
+export type {
+  Message,
+  GenerationOptions,
+  LanguageModelV1FinishReason,
+  ToolCall,
+  ToolResult,
+} from "./types/common";
+
+export type {
+  ILanguageModel,
+  GenerationResponse,
+  LanguageModelConfig,
+  PortkeyLanguageModelConfig,
+  OpenAIAssistantLanguageModelConfig,
+  PortkeyStreamResponse,
+  AssistantStreamResponse,
+} from "./llm/interfaces/ILanguageModel";
+
+export type {
+  ITool,
+  ToolMetadata,
+  IToolRegistry,
+} from "./tools/interfaces/ITool";

@@ -1,18 +1,14 @@
-# AI Routing System with PortKey and Swarm Concepts
+# @zen/ai-agent-sdk
 
-This project implements an AI routing system that intelligently routes user requests to the most appropriate AI agent based on the request content. It leverages concepts from OpenAI's Swarm and uses PortKey for managing multiple AI providers.
+AI Agent SDK for building intelligent agents with LLM integration.
 
-## Project Structure
+## Installation
 
-The project follows a modular structure with separation of concerns, allowing for easy scalability and maintainability.
+todo
 
-## Setup Instructions
+## Features
 
-### Prerequisites
-
-- Node.js (v14 or above)
-- npm or yarn
-- TypeScript
-
-### Install Dependencies
-
+- Agent-based architecture
+- LLM integration (OpenAI, Anthropic, etc.)
+- Tool system
+- Classification and orchestration
