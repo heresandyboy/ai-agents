@@ -1,50 +1,22 @@
 {
   "name": "ai-agents",
   "version": "1.0.0",
-  "main": "index.js",
+  "description": "",
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm --parallel -r dev",
+    "lint": "pnpm -r lint",
+    "clean": "pnpm -r clean",
+    "test": "pnpm -r test"
+  },
   "keywords": [],
   "author": "Andy Ainsworth",
   "license": "ISC",
-  "description": "",
-  "scripts": {
-    "build": "tsc",
-    "test": "jest",
-    "start": "npm run build && node dist/index.js",
-    "gateway": "npx @portkey-ai/gateway",
-    "deps-windows": "choco install imagemagick",
-    "cli": "ts-node src/cli.ts",
-    "dev": "ts-node src/main.ts"
-  },
-  "dependencies": {
-    "@portkey-ai/vercel-provider": "^1.0.1",
-    "@types/debug": "^4.1.12",
-    "ai": "^3.4.18",
-    "debug": "^4.3.7",
-    "dotenv": "^16.4.5",
-    "keysender": "^2.3.0",
-    "langfuse": "^3.28.0",
-    "lru-cache": "^11.0.1",
-    "openai": "^4.73.1",
-    "portkey-ai": "^1.5.1",
-    "screenshot-desktop": "^1.15.0",
-    "ts-node": "^10.9.2",
-    "zod": "^3.23.8"
-  },
+  "packageManager": "pnpm@9.13.2+sha512.88c9c3864450350e65a33587ab801acf946d7c814ed1134da4a924f6df5a2120fd36b46aab68f7cd1d413149112d53c7db3a4136624cfd00ff1846a0c6cef48a",
   "devDependencies": {
-    "@types/jest": "^29.5.14",
-    "@types/json-schema": "^7.0.15",
-    "@types/node": "^22.8.0",
-    "@types/screenshot-desktop": "^1.12.3",
-    "jest": "^29.7.0",
-    "ts-jest": "^29.2.5",
-    "typescript": "^5.6.3"
-  },
-  "jest": {
-    "preset": "ts-jest",
-    "testEnvironment": "node",
-    "testMatch": [
-      "**/__tests__/**/*.test.ts"
-    ]
-  },
-  "packageManager": "pnpm@9.13.2+sha512.88c9c3864450350e65a33587ab801acf946d7c814ed1134da4a924f6df5a2120fd36b46aab68f7cd1d413149112d53c7db3a4136624cfd00ff1846a0c6cef48a"
+    "@types/node": "^22.10.1",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.6"
+  }
 }
