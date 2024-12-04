@@ -5,3 +5,5 @@ export * from "./errors/ToolError";
 export * from "./WeatherTool";
 export * from "./CalculatorTool";
 export * from "./ClassificationTool";
+export { WeatherTool } from "./WeatherTool";
+export { CalculatorTool } from "./CalculatorTool";

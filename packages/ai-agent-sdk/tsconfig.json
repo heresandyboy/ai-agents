@@ -5,7 +5,8 @@
         "outDir": "./dist",
         "lib": ["ESNext"],
         "types": ["node"],
-        "moduleResolution": "node"
+        "moduleResolution": "node",
+        "incremental": false
     },
     "include": ["src"],
     "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]

@@ -3,8 +3,10 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
+    "preinstall": "npx only-allow pnpm",
     "build": "pnpm -r build",
-    "dev": "pnpm --parallel -r dev",
+    "dev": "pnpm --parallel --filter @zen/ai-agent-sdk --filter example dev",
+    "dev:all": "pnpm --parallel -r dev",
     "lint": "pnpm -r lint",
     "clean": "pnpm -r clean",
     "test": "pnpm -r test"
@@ -15,7 +17,6 @@
   "packageManager": "pnpm@9.13.2+sha512.88c9c3864450350e65a33587ab801acf946d7c814ed1134da4a924f6df5a2120fd36b46aab68f7cd1d413149112d53c7db3a4136624cfd00ff1846a0c6cef48a",
   "devDependencies": {
     "@types/node": "^22.10.1",
-    "tsup": "^8.3.5",
     "typescript": "^5.7.2",
     "vitest": "^2.1.6"
   }

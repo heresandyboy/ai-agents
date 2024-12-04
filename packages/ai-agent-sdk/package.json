@@ -5,6 +5,43 @@
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/**/*.ts",
+    "test": "vitest",
+    "test:watch": "vitest --watch",
+    "cli": "tsx src/cli.ts",
+    "main": "tsx src/main.ts",
+    "quick-install": "pnpm install --ignore-workspace-root-check"
+  },
+  "dependencies": {
+    "@portkey-ai/vercel-provider": "^1.0.1",
+    "@types/debug": "^4.1.12",
+    "ai": "^3.4.18",
+    "debug": "^4.3.7",
+    "dotenv": "^16.4.5",
+    "keysender": "^2.3.0",
+    "lru-cache": "^11.0.1",
+    "openai": "^4.73.1",
+    "portkey-ai": "^1.5.1",
+    "screenshot-desktop": "^1.15.0",
+    "ts-node": "^10.9.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/json-schema": "^7.0.15",
+    "@types/node": "^22.10.1",
+    "@typescript-eslint/eslint-plugin": "^8.16.0",
+    "@typescript-eslint/parser": "^8.16.0",
+    "@vitest/coverage-v8": "^2.1.6",
+    "eslint": "^9.15.0",
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.6"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -37,45 +74,7 @@
     "README.md",
     "LICENSE"
   ],
-  "scripts": {
-    "build": "tsup",
-    "dev": "tsup --watch",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint src/**/*.ts",
-    "test": "vitest",
-    "test:watch": "vitest --watch",
-    "cli": "tsx src/cli.ts",
-    "main": "tsx src/main.ts",
-    "quick-install": "pnpm install --ignore-workspace-root-check"
-  },
   "engines": {
     "node": ">=18.17"
-  },
-  "dependencies": {
-    "@portkey-ai/vercel-provider": "^1.0.1",
-    "@types/debug": "^4.1.12",
-    "ai": "^3.4.18",
-    "debug": "^4.3.7",
-    "dotenv": "^16.4.5",
-    "keysender": "^2.3.0",
-    "langfuse": "^3.28.0",
-    "lru-cache": "^11.0.1",
-    "openai": "^4.73.1",
-    "portkey-ai": "^1.5.1",
-    "screenshot-desktop": "^1.15.0",
-    "ts-node": "^10.9.2",
-    "zod": "^3.23.8"
-  },
-  "devDependencies": {
-    "@types/json-schema": "^7.0.15",
-    "@types/node": "^22.10.1",
-    "@typescript-eslint/eslint-plugin": "^8.16.0",
-    "@typescript-eslint/parser": "^8.16.0",
-    "@vitest/coverage-v8": "^2.1.6",
-    "eslint": "^9.15.0",
-    "tsup": "^8.3.5",
-    "tsx": "^4.19.2",
-    "typescript": "^5.7.2",
-    "vitest": "^2.1.6"
   }
 }

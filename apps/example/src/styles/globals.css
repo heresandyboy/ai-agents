@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body {
+  height: 100%;
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 98%;
+    --foreground: 222.2 84% 4.9%;
+    --font-size-base: 16px;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 0 0% 100%;
+  }
+
+  body {
+    @apply antialiased;
+    font-size: var(--font-size-base);
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+  }
+
+  .prose {
+    font-size: var(--font-size-base);
+  }
+}
+
+/* Custom scrollbar styles */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-300 dark:bg-gray-700 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-400 dark:bg-gray-600;
+}
+
+/* Smooth transitions for theme switching */
+* {
+  @apply transition-colors duration-200;
+}
+
+/* Add these utility classes */
+.text-scale {
+  font-size: calc(var(--font-size-base) * 1);
+}
+
+.text-scale-sm {
+  font-size: calc(var(--font-size-base) * 0.875);
+}
+
+.text-scale-lg {
+  font-size: calc(var(--font-size-base) * 1.125);
+}
