@@ -1,13 +1,13 @@
-import { Agent } from "../base/Agent";
-import type { GenerationOptions, Message } from "../../types/common";
-import {
-  AgentClassifier,
-  type ClassifierResult,
-} from "../classification/AgentClassifier";
 import {
   type GenerationResponse,
   type PortkeyStreamResponse,
 } from "../../llm/interfaces/ILanguageModel";
+import type { GenerationOptions, Message } from "../../types/common";
+import { type Agent } from "../base/Agent";
+import {
+  type AgentClassifier,
+  type ClassifierResult,
+} from "../classification/AgentClassifier";
 
 export class AgentOrchestrator {
   private agents: Agent<any>[];
@@ -21,17 +21,23 @@ export class AgentOrchestrator {
   public async process(
     input: string,
     conversationHistory: Message[] = [],
-    options: GenerationOptions = {}
+    options: GenerationOptions & { onUpdate?: (status: string) => void } = {}
   ): Promise<string | GenerationResponse | PortkeyStreamResponse | Response> {
+    // Send a status update: Classifying input
+    options.onUpdate?.('Classifying input');
+
     // Classify the input to get the selected agent
     const classificationResult: ClassifierResult =
       await this.classifierAgent.classify(
         input,
         this.agents,
-        conversationHistory
+        conversationHistory,
+        options.onUpdate // Pass the onUpdate callback
       );
 
     const selectedAgentName = classificationResult.selectedAgent;
+
+    options.onUpdate?.(`Agent '${selectedAgentName}' responding`);
 
     console.log(`Classifier selected agent: ${selectedAgentName}`);
 
@@ -57,6 +63,9 @@ export class AgentOrchestrator {
       stream: options.stream,
     });
     console.log("Orchestrator Response", JSON.stringify(response, null, 5));
+
+    // Send final status update
+    options.onUpdate?.('Processing completed');
 
     return response;
   }

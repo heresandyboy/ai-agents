@@ -1,13 +1,13 @@
 'use client';
 
-import React, { FC, useRef, useState, useEffect, useCallback, memo, useMemo } from 'react';
-import { Message } from 'ai';
-import { Markdown } from './Markdown';
-import { motion } from 'framer-motion';
-import { ArrowUp, ArrowDown } from 'lucide-react';
-import ToolInvocationStatus from './ToolInvocationStatus';
+import { type Message } from 'ai';
 import cx from 'classnames';
+import { motion } from 'framer-motion';
+import { ArrowDown, ArrowUp } from 'lucide-react';
+import React, { type FC, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Markdown } from './Markdown';
 import { Weather } from './tool/Weather';
+import ToolInvocationStatus from './ToolInvocationStatus';
 
 interface MessageProps {
   message: Message;

@@ -2,24 +2,23 @@ import {
   AssistantResponse,
   type Message as AIMessage,
 } from "ai";
-import OpenAI from "openai";
-import {
-  type ILanguageModel,
-  type GenerationResponse,
-  type LanguageModelConfig,
-  type OpenAIAssistantLanguageModelConfig,
-  type AssistantStreamResponse,
-} from "../interfaces/ILanguageModel";
-import { type GenerationOptions, type Message } from "../../types/common";
-import { type ITool } from "../../tools/interfaces/ITool";
 import debug from "debug";
-import { LLMError } from "../errors/LLMError";
+import OpenAI from "openai";
 import {
   type AssistantTool,
   type FunctionTool,
 } from "openai/resources/beta/assistants";
-import { ToolError } from "../../tools/errors/ToolError";
 import * as z from "zod";
+import { ToolError } from "../../tools/errors/ToolError";
+import { type ITool } from "../../tools/interfaces/ITool";
+import { type GenerationOptions, type Message } from "../../types/common";
+import { LLMError } from "../errors/LLMError";
+import {
+  type AssistantStreamResponse,
+  type GenerationResponse,
+  type ILanguageModel,
+  type OpenAIAssistantLanguageModelConfig
+} from "../interfaces/ILanguageModel";
 
 const log = debug("llm:openai-assistant");
 
@@ -253,7 +252,7 @@ export class OpenAIAssistantLanguageModel
               runResult.required_action.submit_tool_outputs.tool_calls;
 
             const toolOutputs = await Promise.all(
-              toolCalls.map(async (toolCall) => {
+              toolCalls.map(async (toolCall: any) => {
                 if (toolCall.type !== "function") {
                   throw new ToolError(
                     `Unsupported tool call type: ${toolCall.type}`

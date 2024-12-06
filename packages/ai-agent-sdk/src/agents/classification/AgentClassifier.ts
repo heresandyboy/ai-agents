@@ -1,16 +1,15 @@
-import { Agent } from "../base/Agent";
 import {
+  type GenerationResponse,
   type ILanguageModel,
   type LanguageModelConfig,
   type PortkeyStreamResponse,
-  type GenerationResponse,
 } from "../../llm/interfaces/ILanguageModel";
-import { type Message } from "../../types/common";
-import { ToolRegistry } from "../../tools/registry/ToolRegistry";
-import { z } from "zod";
-import { type ITool } from "../../tools/interfaces/ITool";
-import { AgentError } from "../errors/AgentError";
 import { ClassificationTool } from "../../tools/ClassificationTool";
+import { type ITool } from "../../tools/interfaces/ITool";
+import { ToolRegistry } from "../../tools/registry/ToolRegistry";
+import { type Message } from "../../types/common";
+import { Agent } from "../base/Agent";
+import { AgentError } from "../errors/AgentError";
 
 export interface ClassifierResult {
   selectedAgent: string | null;
@@ -65,8 +64,11 @@ ${agentEntries.join("\n")}
   public async classify(
     inputText: string,
     agents: Agent<any>[],
-    conversationHistory: Message[] = []
+    conversationHistory: Message[] = [],
+    onUpdate?: (status: string) => void
   ): Promise<ClassifierResult> {
+    onUpdate?.('Analyzing agents');
+
     // Replace the existing agent descriptions preparation
     const agentDescriptions = this.formatAgentDescriptions(agents);
 
@@ -82,19 +84,25 @@ ${agentEntries.join("\n")}
     // Set the system prompt for the agent
     this.agent.setSystemPrompt(systemPrompt);
 
+    // Send status update after setting system prompt
+    onUpdate?.('System prompt prepared');
+
     // Prepare messages
     const messages: Message[] = [
-      { role: "system", content: systemPrompt },
+      { role: 'system', content: systemPrompt },
       ...conversationHistory,
-      { role: "user", content: inputText },
+      { role: 'user', content: inputText },
     ];
 
     // Process messages with toolChoice
     const response = await this.agent.processMessages(messages, {
       stream: false,
       maxSteps: 1,
-      toolChoice: { type: "tool", toolName: this.classifierTool.getName() },
+      toolChoice: { type: 'tool', toolName: this.classifierTool.getName() },
     });
+
+    // Send status update after classification
+    onUpdate?.('Classification completed');
 
     // Handle the response
     const parsedResult = await this.handleResponse(response);

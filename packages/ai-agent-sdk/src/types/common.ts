@@ -1,4 +1,6 @@
-export type MessageRole = "system" | "user" | "assistant" | "function";
+export type MessageRole = "system" | "user" | "assistant" | "data"
+
+// TODO: Need to somehow link this to the ai package Message Roles so I dont need ot update it all the time
 
 export type LanguageModelV1FinishReason =
   | "stop"

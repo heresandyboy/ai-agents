@@ -1,5 +1,5 @@
 // src/ui/hooks/useStreamingData.ts
-import { Message } from "ai";
+import { type Message } from "ai";
 import { useEffect, useRef } from "react";
 import { v4 as uuidv4 } from "uuid";
 

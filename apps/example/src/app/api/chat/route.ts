@@ -12,6 +12,8 @@ import { type NextRequest } from "next/server";
 // Import specific tools from the tools subpath
 import { CalculatorTool, WeatherTool } from "@zen/ai-agent-sdk/tools";
 
+import { createDataStreamResponse, type DataStreamWriter } from 'ai';
+
 export const runtime = "edge";
 
 // Configure the language model
@@ -83,35 +85,54 @@ export async function POST(req: NextRequest) {
     function_call: msg.function_call,
   }));
 
-  try {
-    const lastMessage = messages[messages.length - 1];
-    const response = await orchestrator.process(
-      lastMessage.content,
-      messages.slice(0, -1),
-      { stream: true }
-    );
+  // Use createDataStreamResponse to handle streaming data
+  return createDataStreamResponse({
+    async execute(dataStream: DataStreamWriter) {
+      try {
+        const lastMessage = messages[messages.length - 1];
+        const conversationHistory = messages.slice(0, -1);
 
-    // Handle Portkey streaming response
-    if ("textStream" in response && "toDataStreamResponse" in response) {
-      return response.toDataStreamResponse();
-    }
+        // Send initial status message
+        dataStream.writeData({ status: 'Understanding Query' });
 
-    // Handle non-streaming response
-    return new Response(JSON.stringify({ content: response }), {
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-  } catch (error) {
-    console.error("Error processing request:", error);
-    return new Response(
-      JSON.stringify({ error: "An error occurred processing your request" }),
-      {
-        status: 500,
-        headers: {
-          "Content-Type": "application/json",
-        },
+        // Call the orchestrator's process method with onUpdate callback
+        const response = await orchestrator.process(
+          lastMessage.content,
+          conversationHistory,
+          {
+            stream: true,
+            onUpdate: (statusMessage: string) => {
+              // Send status updates to the client
+              dataStream.writeData({ status: statusMessage });
+            },
+          }
+        );
+
+        if ("textStream" in response && "mergeIntoDataStream" in response) {
+          dataStream.writeData('OK OK OK');
+          response.mergeIntoDataStream(dataStream);
+        }
+
+        dataStream.writeData('NOT OK')
+
+        // // Handle streaming response
+        // if ('textStream' in response && typeof response.textStream === 'object') {
+        //   // Merge the text stream into the dataStream
+        //   for await (const chunk of response.textStream) {
+        //     dataStream.writeData({ content: chunk });
+        //   }
+        // } else {
+        //   // Handle non-streaming response
+        //   dataStream.writeData({ content: response });
+        // }
+      } catch (error) {
+        console.error('Error processing request:', error);
+        dataStream.writeData({ error: 'An error occurred processing your request' });
       }
-    );
-  }
+    },
+    onError: (error) => {
+      // Expose the error message to the client if needed
+      return error instanceof Error ? error.message : String(error);
+    },
+  });
 }
