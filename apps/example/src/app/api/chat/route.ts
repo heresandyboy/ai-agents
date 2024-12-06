@@ -5,8 +5,8 @@ import {
   AgentClassifier,
   LanguageModelFactory,
   ToolRegistry,
-  type PortkeyLanguageModelConfig,
-  type Message
+  PortkeyLanguageModelConfig,
+  type Message,
 } from "@zen/ai-agent-sdk";
 
 // Import specific tools from the tools subpath
@@ -21,7 +21,7 @@ const agentLanguageModelConfig: PortkeyLanguageModelConfig = {
   llmProvider: "openai",
   providerApiKey: process.env.OPENAI_API_KEY!,
   routerApiKey: process.env.PORTKEY_API_KEY!,
-  model: "gpt-4",
+  model: "gpt-4o-mini",
   temperature: 0.1,
 };
 
