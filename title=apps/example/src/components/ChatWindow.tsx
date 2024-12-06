@@ -1,15 +1,15 @@
-'use client';
+"use client";
 
-import StatusUpdatesComponent from '@/components/StatusUpdatesComponent';
-import UsageDataComponent from '@/components/UsageDataComponent';
-import { useSettings } from '@/context/SettingsContext';
-import { useDocumentEffect } from '@/hooks/useDocumentEffect';
-import { useStreamingData } from '@/hooks/useStreamingData';
-import { useChat } from 'ai/react';
-import { ArrowDown, ArrowUp } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import ChatInput from './ChatInput';
-import MessageComponent from './Message';
+import StatusUpdatesComponent from "@/components/StatusUpdatesComponent";
+import UsageDataComponent from "@/components/UsageDataComponent";
+import { useSettings } from "@/context/SettingsContext";
+import { useDocumentEffect } from "@/hooks/useDocumentEffect";
+import { useStreamingData } from "@/hooks/useStreamingData";
+import { useChat } from "ai/react";
+import { ArrowDown, ArrowUp } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import ChatInput from "./ChatInput";
+import MessageComponent from "./Message";
 
 interface ChatWindowProps {
   isSidebarOpen: boolean;
@@ -28,7 +28,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
 
   useDocumentEffect(
     (document) => {
-      document.documentElement.style.setProperty('--font-size-base', `${fontSize}px`);
+      document.documentElement.style.setProperty(
+        "--font-size-base",
+        `${fontSize}px`
+      );
     },
     [fontSize]
   );
@@ -46,7 +49,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
     data: streamingData,
     stop,
   } = useChat({
-    api: '/api/chat',
+    api: "/api/chat",
     maxSteps: 5,
   });
 
@@ -60,7 +63,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
   const scrollToTop = useCallback(() => {
     if (topRef.current) {
       requestAnimationFrame(() => {
-        topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       });
     }
   }, []);
@@ -68,7 +71,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
   const scrollToBottom = useCallback(() => {
     if (bottomRef.current) {
       requestAnimationFrame(() => {
-        bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
       });
     }
   }, []);
@@ -87,12 +90,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
   useEffect(() => {
     const container = containerRef.current;
     if (container) {
-      container.addEventListener('scroll', handleScroll);
+      container.addEventListener("scroll", handleScroll);
       // Initial check
       handleScroll();
     }
     return () => {
-      container?.removeEventListener('scroll', handleScroll);
+      container?.removeEventListener("scroll", handleScroll);
     };
   }, [handleScroll]);
 
@@ -100,14 +103,15 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
     // Only scroll if the user is at the bottom
     if (isAtBottom) {
       requestAnimationFrame(() => {
-        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+        bottomRef.current?.scrollIntoView({ behavior: "smooth" });
       });
     }
 
     // Check if scrolling is needed
     const container = containerRef.current;
     if (container) {
-      const isContentScrollable = container.scrollHeight > container.clientHeight;
+      const isContentScrollable =
+        container.scrollHeight > container.clientHeight;
       setIsScrollable(isContentScrollable);
     }
   }, [messages, statusUpdates, isAtBottom]);

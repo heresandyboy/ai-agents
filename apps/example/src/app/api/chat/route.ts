@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
         const conversationHistory = messages.slice(0, -1);
 
         // Send initial status message
-        dataStream.writeData({ status: 'Understanding Query' });
+        dataStream.writeData({ type: 'status', status: 'Understanding Query' });
 
         // Call the orchestrator's process method with onUpdate callback
         const response = await orchestrator.process(
@@ -102,8 +102,8 @@ export async function POST(req: NextRequest) {
           {
             stream: true,
             onUpdate: (statusMessage: string) => {
-              // Send status updates to the client
-              dataStream.writeData({ status: statusMessage });
+              // Send status updates to the client with type 'status'
+              dataStream.writeData({ type: 'status', status: statusMessage });
             },
           }
         );
@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
           response.mergeIntoDataStream(dataStream);
         }
 
-        dataStream.writeData('NOT OK')
+        dataStream.writeData({ type: 'endOfProcessing' });
 
         // // Handle streaming response
         // if ('textStream' in response && typeof response.textStream === 'object') {
@@ -127,7 +127,10 @@ export async function POST(req: NextRequest) {
         // }
       } catch (error) {
         console.error('Error processing request:', error);
-        dataStream.writeData({ error: 'An error occurred processing your request' });
+        dataStream.writeData({
+          type: 'error',
+          error: 'An error occurred processing your request',
+        });
       }
     },
     onError: (error) => {

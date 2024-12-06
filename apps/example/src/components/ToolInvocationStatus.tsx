@@ -1,8 +1,8 @@
 // src/ui/components/ToolInvocationStatus.tsx
 'use client';
-import React, { useState, useEffect } from 'react';
-import { ToolInvocation } from 'ai';
+import { type ToolInvocation } from 'ai';
 import { ChevronDown, ChevronUp, Loader } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
 import ReactJson from 'react-json-view';
 
 interface ToolInvocationStatusProps {
