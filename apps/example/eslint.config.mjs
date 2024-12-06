@@ -1,6 +1,6 @@
 import pluginNext from '@next/eslint-plugin-next';
-import parser from '@typescript-eslint/parser';
 import tsPlugin from '@typescript-eslint/eslint-plugin';
+import parser from '@typescript-eslint/parser';
 
 export default [
   {
@@ -20,7 +20,7 @@ export default [
       '@next/next': pluginNext,
       '@typescript-eslint': tsPlugin
     },
-    files: ['**/*.{js,mjs,cjs,ts,jsx,tsx}'],
+    files: ['**/*.{ts,tsx}'],
     rules: {
       ...pluginNext.configs.recommended.rules,
       ...pluginNext.configs['core-web-vitals'].rules,
@@ -31,9 +31,7 @@ export default [
           fixStyle: 'inline-type-imports',
           disallowTypeAnnotations: true
         }
-      ],
-      'import/consistent-type-specifier-style': ['error', 'prefer-inline'],
-      'import/no-duplicates': ['error', { 'prefer-inline': true }]
+      ]
     },
   },
 ];
