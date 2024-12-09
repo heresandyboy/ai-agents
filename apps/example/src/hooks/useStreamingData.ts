@@ -1,13 +1,14 @@
 // src/ui/hooks/useStreamingData.ts
 'use client';
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 interface StreamingDataHandlerProps {
   streamingData: any;
   metadata: any;
   setStatusUpdates: React.Dispatch<React.SetStateAction<string[]>>;
   setUsageData: React.Dispatch<React.SetStateAction<any>>;
+  currentMessageId?: string; // ID of the current assistant message
 }
 
 export function useStreamingData({
@@ -15,9 +16,12 @@ export function useStreamingData({
   metadata,
   setStatusUpdates,
   setUsageData,
+  currentMessageId,
 }: StreamingDataHandlerProps) {
+  const previousStatusesRef = useRef<Record<string, string[]>>({});
+
   useEffect(() => {
-    if (!streamingData) return;
+    if (!streamingData || !currentMessageId) return;
 
     let dataChunk = streamingData;
 
@@ -32,20 +36,17 @@ export function useStreamingData({
         .reverse()
         .find(chunk => chunk?.type === 'usage')?.usage;
 
-      // Update current status updates for display during streaming
+      // Store status updates for this message ID
+      previousStatusesRef.current[currentMessageId] = statusUpdates;
+      
+      // Update current status updates for streaming display
       setStatusUpdates(statusUpdates);
       
       if (lastUsageData) {
         setUsageData(lastUsageData);
       }
-      return;
     }
+  }, [streamingData, setStatusUpdates, setUsageData, currentMessageId]);
 
-    // Handle single updates
-    if (dataChunk?.type === 'status') {
-      setStatusUpdates(prev => [...prev, dataChunk.status]);
-    } else if (dataChunk?.type === 'usage') {
-      setUsageData(dataChunk.usage);
-    }
-  }, [streamingData, setStatusUpdates, setUsageData]);
+  return previousStatusesRef.current;
 }

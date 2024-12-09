@@ -5,11 +5,19 @@ import UsageDataComponent from '@/components/UsageDataComponent';
 import { useSettings } from '@/context/SettingsContext';
 import { useDocumentEffect } from '@/hooks/useDocumentEffect';
 import { useStreamingData } from '@/hooks/useStreamingData';
+import { type Message as AIMessage } from 'ai';
 import { useChat } from 'ai/react';
 import { ArrowDown, ArrowUp } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ChatInput from './ChatInput';
 import MessageComponent from './Message';
+
+
+export interface Message extends AIMessage {
+  statusUpdates?: string[];
+  toolInvocations?: any[];
+  agentName?: string;
+}
 
 interface ChatWindowProps {
   isSidebarOpen: boolean;
@@ -39,7 +47,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
   const {
     messages,
     metadata,
-    setMessages,
     input,
     handleInputChange,
     handleSubmit,
@@ -113,16 +120,23 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
     }
   }, [messages, statusUpdates, isAtBottom]);
 
-  useStreamingData({
+  // Get the current assistant message ID
+  const currentMessageId = useMemo(() => {
+    const lastMessage = messages[messages.length - 1];
+    return lastMessage?.role === 'assistant' ? lastMessage.id : undefined;
+  }, [messages]);
+
+  // Store all status updates by message ID
+  const messageStatusUpdates = useStreamingData({
     streamingData,
     metadata,
     setStatusUpdates,
     setUsageData,
+    currentMessageId,
   });
 
-  // Memoize messages and status updates to prevent unnecessary re-renders
+  // Memoize messages to prevent unnecessary re-renders
   const memoizedMessages = useMemo(() => messages, [messages]);
-  const memoizedStatusUpdates = useMemo(() => statusUpdates, [statusUpdates]);
 
   return (
     <div className="relative flex flex-col h-full">
@@ -143,25 +157,29 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
       >
         <div ref={topRef} className="scroll-mt-16" />
 
-        {/* Render Messages with Status Updates */}
         {memoizedMessages.map((msg, index) => (
           <React.Fragment key={msg.id}>
+            {/* Show stored status updates for assistant messages */}
+            {msg.role === 'assistant' && messageStatusUpdates[msg.id] && (
+              <StatusUpdatesComponent 
+                statusUpdates={messageStatusUpdates[msg.id]}
+                isLoading={isLoading && index === messages.length - 1}
+              />
+            )}
             <MessageComponent
               message={msg}
               isLoading={isLoading && index === messages.length - 1}
             />
-            {/* Show status updates after the last user message while loading */}
-            {isLoading && 
-             index === messages.length - 2 && 
-             msg.role === 'user' && 
-             memoizedStatusUpdates.length > 0 && (
-              <StatusUpdatesComponent 
-                statusUpdates={memoizedStatusUpdates}
-                isLoading={true}
-              />
-            )}
           </React.Fragment>
         ))}
+
+        {/* Show current status updates during streaming */}
+        {isLoading && statusUpdates.length > 0 && !messageStatusUpdates[currentMessageId!] && (
+          <StatusUpdatesComponent 
+            statusUpdates={statusUpdates}
+            isLoading={true}
+          />
+        )}
 
         {/* Usage Data */}
         {usageData && <UsageDataComponent usage={usageData} />}
