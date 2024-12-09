@@ -7,7 +7,7 @@ import { useDocumentEffect } from '@/hooks/useDocumentEffect';
 import { useStreamingData } from '@/hooks/useStreamingData';
 import { useChat } from 'ai/react';
 import { ArrowDown, ArrowUp } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ChatInput from './ChatInput';
 import MessageComponent from './Message';
 
@@ -38,6 +38,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
 
   const {
     messages,
+    metadata,
     setMessages,
     input,
     handleInputChange,
@@ -114,7 +115,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
 
   useStreamingData({
     streamingData,
-    setMessages,
+    metadata,
     setStatusUpdates,
     setUsageData,
   });
@@ -140,27 +141,31 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
         ref={containerRef}
         className="flex-1 overflow-y-auto p-4 pr-20 space-y-4 pt-20 pb-24"
       >
-        {/* Top of the messages with adjusted scroll margin */}
         <div ref={topRef} className="scroll-mt-16" />
 
-        {/* Render Messages */}
+        {/* Render Messages with Status Updates */}
         {memoizedMessages.map((msg, index) => (
-          <MessageComponent
-            key={msg.id}
-            message={msg}
-            isLoading={isLoading && index === messages.length - 1}
-          />
+          <React.Fragment key={msg.id}>
+            <MessageComponent
+              message={msg}
+              isLoading={isLoading && index === messages.length - 1}
+            />
+            {/* Show status updates after the last user message while loading */}
+            {isLoading && 
+             index === messages.length - 2 && 
+             msg.role === 'user' && 
+             memoizedStatusUpdates.length > 0 && (
+              <StatusUpdatesComponent 
+                statusUpdates={memoizedStatusUpdates}
+                isLoading={true}
+              />
+            )}
+          </React.Fragment>
         ))}
-
-        {/* Status Updates */}
-        {isLoading && memoizedStatusUpdates.length > 0 && (
-          <StatusUpdatesComponent statusUpdates={memoizedStatusUpdates} />
-        )}
 
         {/* Usage Data */}
         {usageData && <UsageDataComponent usage={usageData} />}
 
-        {/* Bottom of the messages with adjusted scroll margin */}
         <div ref={bottomRef} className="scroll-mb-24" />
       </div>
 

@@ -10,13 +10,16 @@ import { Weather } from './tool/Weather';
 import ToolInvocationStatus from './ToolInvocationStatus';
 
 interface MessageProps {
-  message: Message;
+  message: Message & {
+    agentName?: string;
+  };
   isLoading?: boolean;
   block?: any;
   setBlock?: React.Dispatch<React.SetStateAction<any>>;
 }
 
 const MessageComponent: FC<MessageProps> = ({ message, isLoading, block, setBlock }) => {
+  console.log("message", message);
   const messageRef = useRef<HTMLDivElement>(null);
   const topRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -89,7 +92,11 @@ const MessageComponent: FC<MessageProps> = ({ message, isLoading, block, setBloc
       <div ref={topRef} className="scroll-mt-16" />
 
       <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-        {message.role.charAt(0).toUpperCase() + message.role.slice(1)}
+        {message.role === 'assistant' && message.agentName ? (
+          `${message.agentName} (Assistant)`
+        ) : (
+          message.role.charAt(0).toUpperCase() + message.role.slice(1)
+        )}
       </p>
       <div className="prose dark:prose-invert">
         <Markdown>{message.content}</Markdown>

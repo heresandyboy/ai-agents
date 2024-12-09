@@ -1,11 +1,11 @@
-import React, { useRef, useEffect, ChangeEvent, KeyboardEvent, useState } from 'react';
-import { Send, X, Settings } from 'lucide-react';
-import { clsx } from 'clsx';
-import { Textarea } from './ui/textarea';
 import { useSettings } from '@/context/SettingsContext';
-import { SettingsPopover } from './SettingsPopover';
-import Tooltip from './ui/Tooltip';
 import { useDocumentEffect } from '@/hooks/useDocumentEffect';
+import { clsx } from 'clsx';
+import { Send, Settings, X } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react';
+import { SettingsPopover } from './SettingsPopover';
+import { Textarea } from './ui/textarea';
+import Tooltip from './ui/Tooltip';
 
 interface ChatInputProps {
   input: string;
@@ -31,6 +31,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const settingsPopoverRef = useRef<HTMLDivElement>(null);
 
+  // Handle textarea auto-resize
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -38,24 +39,33 @@ const ChatInput: React.FC<ChatInputProps> = ({
     }
   }, [input]);
 
-  const onInputChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
+  // Memoize input handlers
+  const onInputChange = useCallback((event: ChangeEvent<HTMLTextAreaElement>) => {
     handleInputChange(event);
-  };
+  }, [handleInputChange]);
 
-  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+  const onSubmit = useCallback((event?: React.FormEvent<HTMLFormElement>) => {
+    if (event) {
+      event.preventDefault();
+    }
+    if (!isLoading && input.trim()) {
+      handleSubmit(event);
+    }
+  }, [handleSubmit, input, isLoading]);
+
+  const onKeyDown = useCallback((event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (enterToSend) {
       if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey) {
         event.preventDefault();
-        handleSubmit();
+        onSubmit();
       }
     } else {
       if (event.key === 'Enter' && (event.ctrlKey || event.shiftKey)) {
         event.preventDefault();
-        handleSubmit();
+        onSubmit();
       }
     }
-    // Allow default behavior (new line) when appropriate
-  };
+  }, [enterToSend, onSubmit]);
 
   // Close settings popover when clicking outside
   useDocumentEffect((document) => {
@@ -80,7 +90,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
   return (
     <form
-      onSubmit={handleSubmit}
+      onSubmit={onSubmit}
       className={clsx(
         'fixed bottom-0 right-0 border-t p-4 bg-[hsl(var(--background))] dark:bg-gray-900 z-20',
         isSidebarOpen ? 'left-64' : 'left-0',
@@ -88,7 +98,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
       )}
     >
       <div className="relative flex items-end space-x-4 max-w-4xl mx-auto">
-        {/* Textarea */}
         <Textarea
           ref={textareaRef}
           value={input}
@@ -104,7 +113,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
         />
 
         <div className="flex flex-col items-center space-y-2">
-          {/* Settings Icon */}
           <div className="relative">
             <button
               ref={settingsButtonRef}
@@ -125,7 +133,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
             )}
           </div>
 
-          {/* Send/Stop Button with Tooltip */}
           {isLoading ? (
             <button
               type="button"
@@ -156,4 +163,4 @@ const ChatInput: React.FC<ChatInputProps> = ({
   );
 };
 
-export default ChatInput;
+export default React.memo(ChatInput);
