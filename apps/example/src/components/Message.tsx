@@ -88,9 +88,8 @@ const MessageComponent: FC<MessageProps> = ({ message, isLoading, block, setBloc
           : 'bg-gray-100 dark:bg-gray-800'
       }`}
     >
-      {/* Top of the message with adjusted scroll margin */}
       <div ref={topRef} className="scroll-mt-16" />
-
+      
       <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
         {message.role === 'assistant' && message.agentName ? (
           `${message.agentName} (Assistant)`
@@ -98,9 +97,6 @@ const MessageComponent: FC<MessageProps> = ({ message, isLoading, block, setBloc
           message.role.charAt(0).toUpperCase() + message.role.slice(1)
         )}
       </p>
-      <div className="prose dark:prose-invert">
-        <Markdown>{message.content}</Markdown>
-      </div>
 
       {/* Tool Invocation Status */}
       {message.toolInvocations && (
@@ -146,6 +142,11 @@ const MessageComponent: FC<MessageProps> = ({ message, isLoading, block, setBloc
           })}
         </div>
       )}
+
+      {/* Message content moved below tool invocations */}
+      <div className="prose dark:prose-invert mt-4">
+        <Markdown>{message.content}</Markdown>
+      </div>
 
       {/* Bottom of the message with adjusted scroll margin */}
       <div ref={bottomRef} className="scroll-mb-24" />

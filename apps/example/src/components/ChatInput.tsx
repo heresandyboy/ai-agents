@@ -44,6 +44,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
     handleInputChange(event);
   }, [handleInputChange]);
 
+  // Memoize submit handler with proper dependencies
   const onSubmit = useCallback((event?: React.FormEvent<HTMLFormElement>) => {
     if (event) {
       event.preventDefault();
@@ -53,17 +54,16 @@ const ChatInput: React.FC<ChatInputProps> = ({
     }
   }, [handleSubmit, input, isLoading]);
 
+  // Memoize keydown handler with proper dependencies
   const onKeyDown = useCallback((event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (enterToSend) {
-      if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey) {
-        event.preventDefault();
-        onSubmit();
-      }
-    } else {
-      if (event.key === 'Enter' && (event.ctrlKey || event.shiftKey)) {
-        event.preventDefault();
-        onSubmit();
-      }
+    if (event.key !== 'Enter') return;
+    
+    if (enterToSend && !event.shiftKey && !event.ctrlKey) {
+      event.preventDefault();
+      onSubmit();
+    } else if (!enterToSend && (event.ctrlKey || event.shiftKey)) {
+      event.preventDefault();
+      onSubmit();
     }
   }, [enterToSend, onSubmit]);
 

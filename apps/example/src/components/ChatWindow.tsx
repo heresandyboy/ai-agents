@@ -135,8 +135,34 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
     currentMessageId,
   });
 
-  // Memoize messages to prevent unnecessary re-renders
-  const memoizedMessages = useMemo(() => messages, [messages]);
+  // Consolidate messages to prevent duplicates
+  const consolidatedMessages = useMemo(() => {
+    return messages.reduce((acc, current, index, array) => {
+      // If this is a tool invocation message
+      if (current.toolInvocations?.length) {
+        // Look ahead to see if the next message is the completion
+        const nextMessage = array[index + 1];
+        if (nextMessage && 
+            nextMessage.role === 'assistant' && 
+            !nextMessage.toolInvocations &&
+            current.createdAt === nextMessage.createdAt) {
+          // Combine the messages
+          acc.push({
+            ...current,
+            content: nextMessage.content,
+            id: current.id, // Keep the first ID
+            revisionId: nextMessage.revisionId
+          });
+        } else {
+          acc.push(current);
+        }
+      } else if (!array[index - 1]?.toolInvocations) {
+        // Only add non-tool messages if they're not part of a tool call
+        acc.push(current);
+      }
+      return acc;
+    }, [] as typeof messages);
+  }, [messages]);
 
   return (
     <div className="relative flex flex-col h-full">
@@ -157,18 +183,17 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
       >
         <div ref={topRef} className="scroll-mt-16" />
 
-        {memoizedMessages.map((msg, index) => (
+        {consolidatedMessages.map((msg, index) => (
           <React.Fragment key={msg.id}>
-            {/* Show stored status updates for assistant messages */}
             {msg.role === 'assistant' && messageStatusUpdates[msg.id] && (
               <StatusUpdatesComponent 
                 statusUpdates={messageStatusUpdates[msg.id]}
-                isLoading={isLoading && index === messages.length - 1}
+                isLoading={isLoading && index === consolidatedMessages.length - 1}
               />
             )}
             <MessageComponent
               message={msg}
-              isLoading={isLoading && index === messages.length - 1}
+              isLoading={isLoading && index === consolidatedMessages.length - 1}
             />
           </React.Fragment>
         ))}
