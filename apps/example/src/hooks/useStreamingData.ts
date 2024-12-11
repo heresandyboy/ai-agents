@@ -26,6 +26,14 @@ export function useStreamingData({
     let dataChunk = streamingData;
 
     if (Array.isArray(dataChunk)) {
+      // Log timestamps for debugging
+      dataChunk.forEach(chunk => {
+        if (chunk?.timestamp) {
+          const delay = Date.now() - chunk.timestamp;
+          console.log(`Stream chunk delay: ${delay}ms`, chunk);
+        }
+      });
+
       // Filter out status updates
       const statusUpdates = dataChunk
         .filter(chunk => chunk?.type === 'status')

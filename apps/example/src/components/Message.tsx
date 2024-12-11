@@ -19,7 +19,7 @@ interface MessageProps {
 }
 
 const MessageComponent: FC<MessageProps> = ({ message, isLoading, block, setBlock }) => {
-  console.log("message", message);
+  // console.log("message", message);
   const messageRef = useRef<HTMLDivElement>(null);
   const topRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);

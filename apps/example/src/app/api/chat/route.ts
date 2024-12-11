@@ -93,7 +93,11 @@ export async function POST(req: NextRequest) {
         const conversationHistory = messages.slice(0, -1);
 
         // Send initial status message
-        dataStream.writeData({ type: 'status', status: 'Understanding Query' });
+        dataStream.writeData({ 
+          type: 'status', 
+          status: 'Understanding Query',
+          timestamp: Date.now() 
+        });
 
         // Call the orchestrator's process method with onUpdate callback
         const response = await orchestrator.process(
@@ -109,7 +113,13 @@ export async function POST(req: NextRequest) {
         );
 
         if ("textStream" in response && "mergeIntoDataStream" in response) {
-          dataStream.writeData('OK OK OK');
+          // Add timestamp before merging
+          dataStream.writeData({ 
+            type: 'debug',
+            message: 'Before merge',
+            timestamp: Date.now() 
+          });
+          
           response.mergeIntoDataStream(dataStream);
         }
 
