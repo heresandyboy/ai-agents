@@ -32,6 +32,10 @@ export function useStreamingData({
     if (Array.isArray(dataChunk)) {
       // Process chunks
       dataChunk.forEach(chunk => {
+        console.log("chunk", JSON.stringify(chunk, null, 2));
+        const receivedAt = Date.now();
+        console.log('difference', receivedAt - chunk.timestamp);
+        console.log('differene in seconds', (receivedAt - chunk.timestamp) / 1000);
         if (chunk.type === 'user-message-id') {
           // Set the current user message id
           setCurrentUserMessageId(chunk.content);

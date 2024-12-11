@@ -98,6 +98,13 @@ export async function POST(req: NextRequest) {
   streamingData.append({
     type: 'user-message-id',
     content: userMessageId,
+    timestamp: Date.now()
+  });
+
+  streamingData.append({
+    type: 'status',
+    status: 'Selecting Agent',
+    timestamp: Date.now()
   });
 
   // Start processing without awaiting the entire result
