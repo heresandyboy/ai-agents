@@ -1,7 +1,7 @@
 'use client';
 
+import ToolInvocationLoader from '@/components/ToolInvocationLoader';
 import { type Message } from 'ai';
-import cx from 'classnames';
 import { motion } from 'framer-motion';
 import { ArrowDown, ArrowUp } from 'lucide-react';
 import React, { type FC, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -82,14 +82,13 @@ const MessageComponent: FC<MessageProps> = ({ message, isLoading, block, setBloc
       initial={{ y: 5, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.3, ease: 'easeOut' }}
-      className={`relative p-4 my-2 rounded-lg ${
-        message.role === 'user'
+      className={`relative p-4 my-2 rounded-lg ${message.role === 'user'
           ? 'bg-blue-100 dark:bg-blue-800/30'
           : 'bg-gray-100 dark:bg-gray-800'
-      }`}
+        }`}
     >
       <div ref={topRef} className="scroll-mt-16" />
-      
+
       <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
         {message.role === 'assistant' && message.agentName ? (
           `${message.agentName} (Assistant)`
@@ -128,15 +127,8 @@ const MessageComponent: FC<MessageProps> = ({ message, isLoading, block, setBloc
 
             // While the tool is running (state is not 'result')
             return (
-              <div
-                key={toolCallId}
-                className={cx({
-                  skeleton: ['getWeather'].includes(toolName),
-                })}
-              >
-                {toolName === 'getWeather' ? (
-                  <Weather />
-                ) : null}
+              <div key={toolCallId}>
+                <ToolInvocationLoader toolName={toolName} />
               </div>
             );
           })}
