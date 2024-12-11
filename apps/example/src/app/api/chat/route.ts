@@ -22,7 +22,7 @@ const agentLanguageModelConfig: PortkeyLanguageModelConfig = {
   llmProvider: "openai",
   providerApiKey: process.env.OPENAI_API_KEY!,
   routerApiKey: process.env.PORTKEY_API_KEY!,
-  model: "gpt-4o-mini",
+  model: "gpt-4",
   temperature: 0.1,
 };
 

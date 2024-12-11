@@ -23,12 +23,22 @@ interface ChatWindowProps {
   isSidebarOpen: boolean;
 }
 
-function debounce(func: Function, wait: number) {
+function debounce<T extends (...args: any[]) => any>(
+  func: T,
+  wait: number
+): T & { cancel: () => void } {
   let timeout: NodeJS.Timeout;
-  return function (...args: any[]) {
+  
+  const debounced = (...args: Parameters<T>) => {
     clearTimeout(timeout);
     timeout = setTimeout(() => func(...args), wait);
   };
+
+  debounced.cancel = () => {
+    clearTimeout(timeout);
+  };
+
+  return debounced as T & { cancel: () => void };
 }
 
 const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
