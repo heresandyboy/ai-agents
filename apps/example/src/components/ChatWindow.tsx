@@ -12,7 +12,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ChatInput from './ChatInput';
 import MessageComponent from './Message';
 
-
 export interface Message extends AIMessage {
   statusUpdates?: string[];
   toolInvocations?: any[];
@@ -53,6 +52,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
 
   const [statusUpdates, setStatusUpdates] = useState<string[]>([]);
   const [usageData, setUsageData] = useState<any>(null);
+
+  // Added state for currentUserMessageId
+  const [currentUserMessageId, setCurrentUserMessageId] = useState<string | undefined>(undefined);
 
   const {
     messages,
@@ -130,46 +132,35 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
     }
   }, [messages, statusUpdates, isAtBottom]);
 
-  // Get the current assistant message ID
-  const currentMessageId = useMemo(() => {
-    const lastMessage = messages[messages.length - 1];
-    return lastMessage?.role === 'assistant' ? lastMessage.id : undefined;
-  }, [messages]);
-
   // Store all status updates by message ID
   const messageStatusUpdates = useStreamingData({
     streamingData,
     metadata,
     setStatusUpdates,
     setUsageData,
-    currentMessageId,
+    setCurrentUserMessageId,
+    currentUserMessageId,
   });
 
   // Consolidate messages to prevent duplicates
   const consolidatedMessages = useMemo(() => {
     return messages.reduce((acc, current, index, array) => {
-      // If this is a tool invocation message
-      if (current.toolInvocations?.length) {
-        // Look ahead to see if the next message is the completion
-        const nextMessage = array[index + 1];
-        if (nextMessage && 
-            nextMessage.role === 'assistant' && 
-            !nextMessage.toolInvocations &&
-            current.createdAt === nextMessage.createdAt) {
-          // Combine the messages
-          acc.push({
-            ...current,
-            content: nextMessage.content,
-            id: current.id, // Keep the first ID
-            revisionId: nextMessage.revisionId
-          });
+      const previousMessage = acc[acc.length - 1];
+
+      if (current.role === 'assistant' && current.toolInvocations?.length) {
+        // Combine with previous assistant message if applicable
+        if (previousMessage && previousMessage.role === 'assistant' && previousMessage.id === current.id) {
+          previousMessage.toolInvocations = [
+            ...(previousMessage.toolInvocations || []),
+            ...current.toolInvocations,
+          ];
         } else {
           acc.push(current);
         }
-      } else if (!array[index - 1]?.toolInvocations) {
-        // Only add non-tool messages if they're not part of a tool call
+      } else {
         acc.push(current);
       }
+
       return acc;
     }, [] as typeof messages);
   }, [messages]);
@@ -193,28 +184,35 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
       >
         <div ref={topRef} className="scroll-mt-16" />
 
-        {consolidatedMessages.map((msg, index) => (
-          <React.Fragment key={msg.id}>
-            {msg.role === 'assistant' && messageStatusUpdates[msg.id] && (
-              <StatusUpdatesComponent 
-                statusUpdates={messageStatusUpdates[msg.id]}
-                isLoading={isLoading && index === consolidatedMessages.length - 1}
-              />
-            )}
-            <MessageComponent
-              message={msg}
-              isLoading={isLoading && index === consolidatedMessages.length - 1}
-            />
-          </React.Fragment>
-        ))}
+        {consolidatedMessages.map((msg, index) => {
+          const isLastMessage = index === consolidatedMessages.length - 1;
 
-        {/* Show current status updates during streaming */}
-        {isLoading && statusUpdates.length > 0 && !messageStatusUpdates[currentMessageId!] && (
-          <StatusUpdatesComponent 
-            statusUpdates={statusUpdates}
-            isLoading={true}
-          />
-        )}
+          // Determine if we should show status updates
+          const showStatusUpdates = msg.role === 'user' && (
+            (isLoading && currentUserMessageId === msg.id) ||
+            messageStatusUpdates[msg.id]?.length > 0
+          );
+
+          // Use statusUpdates when loading, otherwise use messageStatusUpdates
+          const statusUpdatesToShow = isLoading && currentUserMessageId === msg.id
+            ? statusUpdates
+            : messageStatusUpdates[msg.id];
+
+          return (
+            <React.Fragment key={msg.id}>
+              <MessageComponent
+                message={msg}
+                isLoading={isLoading && isLastMessage && msg.role === 'assistant'}
+              />
+              {showStatusUpdates && statusUpdatesToShow && (
+                <StatusUpdatesComponent 
+                  statusUpdates={statusUpdatesToShow}
+                  isLoading={isLoading && isLastMessage}
+                />
+              )}
+            </React.Fragment>
+          );
+        })}
 
         {/* Usage Data */}
         {usageData && <UsageDataComponent usage={usageData} />}

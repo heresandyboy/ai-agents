@@ -65,7 +65,7 @@ export class AgentOrchestrator {
     console.log("Orchestrator Response", JSON.stringify(response, null, 5));
 
     // Send final status update
-    options.onUpdate?.('Processing completed');
+    // options.onUpdate?.('Processing completed');
 
     return response;
   }

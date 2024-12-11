@@ -12,7 +12,7 @@ import { type NextRequest } from "next/server";
 // Import specific tools from the tools subpath
 import { CalculatorTool, WeatherTool } from "@zen/ai-agent-sdk/tools";
 
-import { createDataStreamResponse, type DataStreamWriter } from 'ai';
+import { StreamData } from 'ai';
 
 export const runtime = "edge";
 
@@ -74,10 +74,12 @@ const orchestrator = new AgentOrchestrator(classifierAgent, [
   calculatorAgent,
 ]);
 
+function generateUUID() {
+  return Math.random().toString(36).slice(2);
+}
+
 export async function POST(req: NextRequest) {
   const { messages: rawMessages } = await req.json();
-
-  // Convert the AI SDK messages to our Message type
   const messages: Message[] = rawMessages.map((msg: any) => ({
     role: msg.role,
     content: msg.content,
@@ -85,67 +87,73 @@ export async function POST(req: NextRequest) {
     function_call: msg.function_call,
   }));
 
-  // Use createDataStreamResponse to handle streaming data
-  return createDataStreamResponse({
-    async execute(dataStream: DataStreamWriter) {
-      try {
-        const lastMessage = messages[messages.length - 1];
-        const conversationHistory = messages.slice(0, -1);
+  const lastMessage = messages[messages.length - 1];
+  const conversationHistory = messages.slice(0, -1);
 
-        // Send initial status message
-        dataStream.writeData({ 
-          type: 'status', 
-          status: 'Understanding Query',
-          timestamp: Date.now() 
+  // Create streaming data instance
+  const streamingData = new StreamData();
+
+  // Generate message ID for user message
+  const userMessageId = generateUUID();
+  streamingData.append({
+    type: 'user-message-id',
+    content: userMessageId,
+  });
+
+  // Start processing without awaiting the entire result
+  const resultPromise = orchestrator.process(
+    lastMessage.content,
+    conversationHistory,
+    {
+      stream: true,
+      onUpdate: (statusMessage: string) => {
+        streamingData.append({
+          type: 'status',
+          status: statusMessage,
+          timestamp: Date.now()
         });
+      },
+    }
+  );
 
-        // Call the orchestrator's process method with onUpdate callback
-        const response = await orchestrator.process(
-          lastMessage.content,
-          conversationHistory,
-          {
-            stream: true,
-            onUpdate: (statusMessage: string) => {
-              // Send status updates to the client with type 'status'
-              dataStream.writeData({ type: 'status', status: statusMessage });
-            },
-          }
-        );
+  // Return the response immediately
+  const response = resultPromise.then(async (result) => {
+    if ("textStream" in result) {
+      const assistantMessageId = generateUUID();
+      streamingData.appendMessageAnnotation({
+        messageIdFromServer: assistantMessageId,
+      });
 
-        if ("textStream" in response && "mergeIntoDataStream" in response) {
-          // Add timestamp before merging
-          dataStream.writeData({ 
-            type: 'debug',
-            message: 'Before merge',
-            timestamp: Date.now() 
+      for await (const part of result.fullStream) {
+        if (part.type === 'text-delta') {
+          streamingData.append({
+            type: 'text-delta',
+            content: part.textDelta,
+            id: assistantMessageId
           });
-          
-          response.mergeIntoDataStream(dataStream);
+        } else if (part.type === 'tool-call') {
+          streamingData.append({
+            type: 'tool-call',
+            data: part,
+            id: assistantMessageId
+          });
         }
-
-        dataStream.writeData({ type: 'endOfProcessing' });
-
-        // // Handle streaming response
-        // if ('textStream' in response && typeof response.textStream === 'object') {
-        //   // Merge the text stream into the dataStream
-        //   for await (const chunk of response.textStream) {
-        //     dataStream.writeData({ content: chunk });
-        //   }
-        // } else {
-        //   // Handle non-streaming response
-        //   dataStream.writeData({ content: response });
-        // }
-      } catch (error) {
-        console.error('Error processing request:', error);
-        dataStream.writeData({
-          type: 'error',
-          error: 'An error occurred processing your request',
-        });
       }
-    },
-    onError: (error) => {
-      // Expose the error message to the client if needed
-      return error instanceof Error ? error.message : String(error);
-    },
+    }
+
+    // Close the stream after processing
+    streamingData.close();
+  }).catch((error) => {
+    console.error('Error processing request:', error);
+    streamingData.append({
+      type: 'error',
+      error: 'An error occurred processing your request',
+    });
+    streamingData.close();
+  });
+
+  // Return the streaming response using toDataStreamResponse
+  return (await resultPromise).toDataStreamResponse({
+    data: streamingData,
   });
 }

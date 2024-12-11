@@ -8,7 +8,8 @@ interface StreamingDataHandlerProps {
   metadata: any;
   setStatusUpdates: React.Dispatch<React.SetStateAction<string[]>>;
   setUsageData: React.Dispatch<React.SetStateAction<any>>;
-  currentMessageId?: string; // ID of the current assistant message
+  setCurrentUserMessageId: React.Dispatch<React.SetStateAction<string | undefined>>;
+  currentUserMessageId?: string; // ID of the current user message
 }
 
 export function useStreamingData({
@@ -16,55 +17,48 @@ export function useStreamingData({
   metadata,
   setStatusUpdates,
   setUsageData,
-  currentMessageId,
+  setCurrentUserMessageId,
+  currentUserMessageId,
 }: StreamingDataHandlerProps) {
   const previousStatusesRef = useRef<Record<string, string[]>>({});
-  const processedTimestampsRef = useRef<Set<number>>(new Set());
+  const lastUpdateTimeRef = useRef<number>(0);
+  const UPDATE_INTERVAL = 500; // Update every 500ms
 
   useEffect(() => {
-    if (!streamingData || !currentMessageId) return;
+    if (!streamingData) return;
 
     let dataChunk = streamingData;
 
     if (Array.isArray(dataChunk)) {
-      // Deduplicate chunks based on timestamp
-      const uniqueChunks = dataChunk.filter(chunk => {
-        if (!chunk?.timestamp) return true;
-        if (processedTimestampsRef.current.has(chunk.timestamp)) return false;
-        processedTimestampsRef.current.add(chunk.timestamp);
-        return true;
-      });
+      // Process chunks
+      dataChunk.forEach(chunk => {
+        if (chunk.type === 'user-message-id') {
+          // Set the current user message id
+          setCurrentUserMessageId(chunk.content);
+          // Initialize status updates for this user message ID
+          previousStatusesRef.current[chunk.content] = [];
+          // Reset current status updates
+          setStatusUpdates([]);
+        } else if (chunk.type === 'status') {
+          if (!currentUserMessageId) return; // Ensure we have the user message ID
+          // Initialize the array if not present
+          if (!previousStatusesRef.current[currentUserMessageId]) {
+            previousStatusesRef.current[currentUserMessageId] = [];
+          }
+          previousStatusesRef.current[currentUserMessageId].push(chunk.status);
 
-      // Log delays for unique chunks
-      uniqueChunks.forEach(chunk => {
-        if (chunk?.timestamp) {
-          const delay = Date.now() - chunk.timestamp;
-          console.log(`Stream chunk delay: ${delay}ms`, chunk);
+          // Throttle updates
+          const now = Date.now();
+          if (now - lastUpdateTimeRef.current > UPDATE_INTERVAL) {
+            lastUpdateTimeRef.current = now;
+            // Update current status updates for streaming display
+            setStatusUpdates([...previousStatusesRef.current[currentUserMessageId]]);
+          }
         }
+        // ... handle other chunk types if needed ...
       });
-
-      // Filter out status updates from unique chunks
-      const statusUpdates = uniqueChunks
-        .filter(chunk => chunk?.type === 'status')
-        .map(chunk => chunk.status);
-      
-      // Find the last usage data from unique chunks
-      const lastUsageData = [...uniqueChunks]
-        .reverse()
-        .find(chunk => chunk?.type === 'usage')?.usage;
-
-      if (statusUpdates.length > 0) {
-        // Store status updates for this message ID
-        previousStatusesRef.current[currentMessageId] = statusUpdates;
-        // Update current status updates for streaming display
-        setStatusUpdates(statusUpdates);
-      }
-      
-      if (lastUsageData) {
-        setUsageData(lastUsageData);
-      }
     }
-  }, [streamingData, setStatusUpdates, setUsageData, currentMessageId]);
+  }, [streamingData, setStatusUpdates, setUsageData, setCurrentUserMessageId, currentUserMessageId]);
 
   return previousStatusesRef.current;
 }
