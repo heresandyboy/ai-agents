@@ -19,6 +19,7 @@ export function useStreamingData({
   currentMessageId,
 }: StreamingDataHandlerProps) {
   const previousStatusesRef = useRef<Record<string, string[]>>({});
+  const processedTimestampsRef = useRef<Set<number>>(new Set());
 
   useEffect(() => {
     if (!streamingData || !currentMessageId) return;
@@ -26,29 +27,38 @@ export function useStreamingData({
     let dataChunk = streamingData;
 
     if (Array.isArray(dataChunk)) {
-      // Log timestamps for debugging
-      dataChunk.forEach(chunk => {
+      // Deduplicate chunks based on timestamp
+      const uniqueChunks = dataChunk.filter(chunk => {
+        if (!chunk?.timestamp) return true;
+        if (processedTimestampsRef.current.has(chunk.timestamp)) return false;
+        processedTimestampsRef.current.add(chunk.timestamp);
+        return true;
+      });
+
+      // Log delays for unique chunks
+      uniqueChunks.forEach(chunk => {
         if (chunk?.timestamp) {
           const delay = Date.now() - chunk.timestamp;
           console.log(`Stream chunk delay: ${delay}ms`, chunk);
         }
       });
 
-      // Filter out status updates
-      const statusUpdates = dataChunk
+      // Filter out status updates from unique chunks
+      const statusUpdates = uniqueChunks
         .filter(chunk => chunk?.type === 'status')
         .map(chunk => chunk.status);
       
-      // Find the last usage data
-      const lastUsageData = [...dataChunk]
+      // Find the last usage data from unique chunks
+      const lastUsageData = [...uniqueChunks]
         .reverse()
         .find(chunk => chunk?.type === 'usage')?.usage;
 
-      // Store status updates for this message ID
-      previousStatusesRef.current[currentMessageId] = statusUpdates;
-      
-      // Update current status updates for streaming display
-      setStatusUpdates(statusUpdates);
+      if (statusUpdates.length > 0) {
+        // Store status updates for this message ID
+        previousStatusesRef.current[currentMessageId] = statusUpdates;
+        // Update current status updates for streaming display
+        setStatusUpdates(statusUpdates);
+      }
       
       if (lastUsageData) {
         setUsageData(lastUsageData);
