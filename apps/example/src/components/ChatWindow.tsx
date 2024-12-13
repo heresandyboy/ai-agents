@@ -64,6 +64,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
     isLoading,
     data: streamingData,
     stop,
+
   } = useChat({
     api: '/api/chat',
     maxSteps: 5,
@@ -160,6 +161,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
     setCurrentUserMessageId,
     currentUserMessageId,
     setMessages: setStreamingMessage,
+    setIsLoading: (loading) => {
+      if (!loading) {
+        stop();
+      }
+    },
   });
 
   // Consolidate messages to prevent duplicates
@@ -211,24 +217,26 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
       >
         <div ref={topRef} className="scroll-mt-16" />
 
-        {consolidatedMessages.map((msg, index) => (
+        {messages.map((msg, index) => (
           <React.Fragment key={msg.id}>
-            {/* Display status updates after processing */}
-            {msg.role === 'assistant' && messageStatusUpdates[currentUserMessageId ?? ''] && (
+            {/* Only show status updates for the current streaming message */}
+            {msg.role === 'assistant' && 
+             msg.id === streamingMessage?.id && 
+             messageStatusUpdates[currentUserMessageId ?? ''] && (
               <StatusUpdatesComponent 
                 statusUpdates={messageStatusUpdates[currentUserMessageId ?? '']}
-                isLoading={isLoading && index === consolidatedMessages.length - 1}
+                isLoading={isLoading && index === messages.length - 1}
               />
             )}
             <MessageComponent
               message={msg}
-              isLoading={isLoading && index === consolidatedMessages.length - 1}
+              isLoading={isLoading && index === messages.length - 1}
             />
           </React.Fragment>
         ))}
 
-        {/* Show current status updates during streaming */}
-        {isLoading && statusUpdates.length > 0 && (
+        {/* Show current status updates only if we don't have a streaming message yet */}
+        {isLoading && !streamingMessage && statusUpdates.length > 0 && (
           <StatusUpdatesComponent 
             statusUpdates={statusUpdates}
             isLoading={true}

@@ -22,7 +22,7 @@ const agentLanguageModelConfig: PortkeyLanguageModelConfig = {
   llmProvider: "openai",
   providerApiKey: process.env.OPENAI_API_KEY!,
   routerApiKey: process.env.PORTKEY_API_KEY!,
-  model: "gpt-4",
+  model: "gpt-4o-mini",
   temperature: 0.1,
 };
 
@@ -164,7 +164,7 @@ export async function POST(req: NextRequest) {
 
         // Stream back all parts, including their types and content
         for await (const part of result.fullStream) {
-          console.log('part', JSON.stringify(part, null, 2));
+          // console.log('part', JSON.stringify(part, null, 2));
 
           // Sanitize the part before appending
           const sanitizedPart = sanitizeForJSON(part);

@@ -2,7 +2,7 @@
 'use client';
 
 import { type Message, type ToolInvocation } from 'ai';
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 
 interface StreamingDataHandlerProps {
   streamingData: any;
@@ -12,6 +12,7 @@ interface StreamingDataHandlerProps {
   setCurrentUserMessageId: React.Dispatch<React.SetStateAction<string | undefined>>;
   currentUserMessageId?: string;
   setMessages: React.Dispatch<React.SetStateAction<Message | null>>;
+  setIsLoading: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 export function useStreamingData({
@@ -22,6 +23,7 @@ export function useStreamingData({
   setCurrentUserMessageId,
   currentUserMessageId,
   setMessages,
+  setIsLoading,
 }: StreamingDataHandlerProps) {
   const previousStatusesRef = useRef<Record<string, string[]>>({});
   const processedChunksRef = useRef<Set<string>>(new Set());
@@ -34,116 +36,115 @@ export function useStreamingData({
     toolInvocations: [],
   });
 
-  useEffect(() => {
-    if (!streamingData) return;
+  const processChunk = useCallback(
+    (chunk: any) => {
+      const chunkKey = `${chunk.type}-${chunk.timestamp}-${JSON.stringify(chunk.content)}`;
+      if (processedChunksRef.current.has(chunkKey)) {
+        return;
+      }
+      processedChunksRef.current.add(chunkKey);
 
-    let dataChunk = streamingData;
+      switch (chunk.type) {
+        case 'user-message-id':
+          currentMessageRef.current = {
+            content: '',
+            toolInvocations: [],
+          };
+          setCurrentUserMessageId(chunk.content);
+          previousStatusesRef.current[chunk.content] = [];
+          setStatusUpdates([]);
+          break;
 
-    if (Array.isArray(dataChunk)) {
-      dataChunk.forEach(chunk => {
-        const chunkKey = `${chunk.type}-${chunk.timestamp}-${JSON.stringify(chunk.content)}`;
-        
-        if (processedChunksRef.current.has(chunkKey)) {
-          return;
-        }
-        
-        processedChunksRef.current.add(chunkKey);
+        case 'status':
+          if (!currentUserMessageId) return;
+          if (!previousStatusesRef.current[currentUserMessageId]) {
+            previousStatusesRef.current[currentUserMessageId] = [];
+          }
+          previousStatusesRef.current[currentUserMessageId].push(chunk.status);
+          setStatusUpdates([...previousStatusesRef.current[currentUserMessageId]]);
+          break;
 
-        switch (chunk.type) {
-          case 'user-message-id':
-            setCurrentUserMessageId(chunk.content);
-            previousStatusesRef.current[chunk.content] = [];
-            setStatusUpdates([]);
-            break;
+        case 'tool-call':
+          if (!currentMessageRef.current.id) {
+            currentMessageRef.current.id = chunk.id;
+            setMessages({
+              id: chunk.id,
+              role: 'assistant',
+              content: '',
+              toolInvocations: [],
+              createdAt: new Date(chunk.timestamp),
+            });
+          }
+          const toolCall: ToolInvocation = {
+            state: 'call',
+            toolCallId: chunk.content.toolCallId,
+            toolName: chunk.content.toolName,
+            args: chunk.content.args,
+          };
+          currentMessageRef.current.toolInvocations = [
+            ...currentMessageRef.current.toolInvocations,
+            toolCall,
+          ];
+          setMessages(current => current ? {
+            ...current,
+            toolInvocations: [...currentMessageRef.current.toolInvocations]
+          } : null);
+          break;
 
-          case 'status':
-            if (!currentUserMessageId) return;
-            if (!previousStatusesRef.current[currentUserMessageId]) {
-              previousStatusesRef.current[currentUserMessageId] = [];
-            }
-            previousStatusesRef.current[currentUserMessageId].push(chunk.status);
-            setStatusUpdates([...previousStatusesRef.current[currentUserMessageId]]);
-            break;
-
-          case 'tool-call':
-            if (!currentMessageRef.current.id) {
-              currentMessageRef.current.id = chunk.id;
-              setMessages({
-                id: chunk.id,
-                role: 'assistant',
-                content: '',
-                toolInvocations: [],
-                createdAt: new Date(chunk.timestamp),
-              });
-            }
-            const toolCall: ToolInvocation = {
-              state: 'call',
+        case 'tool-result':
+          const toolIndex = currentMessageRef.current.toolInvocations.findIndex(
+            t => t.toolCallId === chunk.content.toolCallId
+          );
+          if (toolIndex !== -1) {
+            const toolResult: ToolInvocation = {
+              state: 'result',
               toolCallId: chunk.content.toolCallId,
               toolName: chunk.content.toolName,
               args: chunk.content.args,
+              result: chunk.content.result,
             };
-            currentMessageRef.current.toolInvocations = [
-              ...currentMessageRef.current.toolInvocations,
-              toolCall,
-            ];
+            currentMessageRef.current.toolInvocations[toolIndex] = toolResult;
             setMessages(current => current ? {
               ...current,
               toolInvocations: [...currentMessageRef.current.toolInvocations]
             } : null);
-            break;
+          }
+          break;
 
-          case 'tool-result':
-            const toolIndex = currentMessageRef.current.toolInvocations.findIndex(
-              t => t.toolCallId === chunk.content.toolCallId
-            );
-            if (toolIndex !== -1) {
-              const toolResult: ToolInvocation = {
-                state: 'result',
-                toolCallId: chunk.content.toolCallId,
-                toolName: chunk.content.toolName,
-                args: chunk.content.args,
-                result: chunk.content.result,
-              };
-              currentMessageRef.current.toolInvocations[toolIndex] = toolResult;
-              setMessages(current => current ? {
-                ...current,
-                toolInvocations: [...currentMessageRef.current.toolInvocations]
-              } : null);
-            }
-            break;
+        case 'text-delta':
+          if (!currentMessageRef.current.id) {
+            currentMessageRef.current.id = chunk.id;
+            setMessages({
+              id: chunk.id,
+              role: 'assistant',
+              content: chunk.content.textDelta,
+              toolInvocations: [],
+              createdAt: new Date(chunk.timestamp),
+            });
+          } else {
+            currentMessageRef.current.content += chunk.content.textDelta;
+            setMessages(current => current ? {
+              ...current,
+              content: currentMessageRef.current.content
+            } : null);
+          }
+          break;
 
-          case 'text-delta':
-            if (!currentMessageRef.current.id) {
-              currentMessageRef.current.id = chunk.id;
-              setMessages({
-                id: chunk.id,
-                role: 'assistant',
-                content: chunk.content.textDelta,
-                toolInvocations: [],
-                createdAt: new Date(chunk.timestamp),
-              });
-            } else {
-              currentMessageRef.current.content += chunk.content.textDelta;
-              setMessages(current => current ? {
-                ...current,
-                content: currentMessageRef.current.content
-              } : null);
-            }
-            break;
+        case 'finish':
+          setIsLoading(false);
+          break;
+      }
+    },
+    [currentUserMessageId, setCurrentUserMessageId, setStatusUpdates, setMessages, setIsLoading]
+  );
 
-          case 'finish':
-            break;
-        }
-      });
-    }
-  }, [
-    streamingData,
-    setStatusUpdates,
-    setUsageData,
-    setCurrentUserMessageId,
-    currentUserMessageId,
-    setMessages,
-  ]);
+  useEffect(() => {
+    if (!streamingData || !Array.isArray(streamingData)) return;
+
+    streamingData.forEach(processChunk);
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streamingData]);
 
   return previousStatusesRef.current;
 }
