@@ -11,7 +11,7 @@ interface StreamingDataHandlerProps {
   setUsageData: React.Dispatch<React.SetStateAction<any>>;
   setCurrentUserMessageId: React.Dispatch<React.SetStateAction<string | undefined>>;
   currentUserMessageId?: string;
-  onNewMessage?: (message: Message) => void;
+  setMessages: React.Dispatch<React.SetStateAction<Message | null>>;
 }
 
 export function useStreamingData({
@@ -21,7 +21,7 @@ export function useStreamingData({
   setUsageData,
   setCurrentUserMessageId,
   currentUserMessageId,
-  onNewMessage,
+  setMessages,
 }: StreamingDataHandlerProps) {
   const previousStatusesRef = useRef<Record<string, string[]>>({});
   const processedChunksRef = useRef<Set<string>>(new Set());
@@ -49,7 +49,6 @@ export function useStreamingData({
         
         processedChunksRef.current.add(chunkKey);
 
-        // Handle different chunk types
         switch (chunk.type) {
           case 'user-message-id':
             setCurrentUserMessageId(chunk.content);
@@ -69,19 +68,31 @@ export function useStreamingData({
           case 'tool-call':
             if (!currentMessageRef.current.id) {
               currentMessageRef.current.id = chunk.id;
+              setMessages({
+                id: chunk.id,
+                role: 'assistant',
+                content: '',
+                toolInvocations: [],
+                createdAt: new Date(chunk.timestamp),
+              });
             }
-            // Map to ToolInvocation type
             const toolCall: ToolInvocation = {
               state: 'call',
               toolCallId: chunk.content.toolCallId,
               toolName: chunk.content.toolName,
               args: chunk.content.args,
             };
-            currentMessageRef.current.toolInvocations.push(toolCall);
+            currentMessageRef.current.toolInvocations = [
+              ...currentMessageRef.current.toolInvocations,
+              toolCall,
+            ];
+            setMessages(current => current ? {
+              ...current,
+              toolInvocations: [...currentMessageRef.current.toolInvocations]
+            } : null);
             break;
 
           case 'tool-result':
-            // Find and update the corresponding tool call
             const toolIndex = currentMessageRef.current.toolInvocations.findIndex(
               t => t.toolCallId === chunk.content.toolCallId
             );
@@ -94,33 +105,33 @@ export function useStreamingData({
                 result: chunk.content.result,
               };
               currentMessageRef.current.toolInvocations[toolIndex] = toolResult;
+              setMessages(current => current ? {
+                ...current,
+                toolInvocations: [...currentMessageRef.current.toolInvocations]
+              } : null);
             }
             break;
 
           case 'text-delta':
             if (!currentMessageRef.current.id) {
               currentMessageRef.current.id = chunk.id;
+              setMessages({
+                id: chunk.id,
+                role: 'assistant',
+                content: chunk.content.textDelta,
+                toolInvocations: [],
+                createdAt: new Date(chunk.timestamp),
+              });
+            } else {
+              currentMessageRef.current.content += chunk.content.textDelta;
+              setMessages(current => current ? {
+                ...current,
+                content: currentMessageRef.current.content
+              } : null);
             }
-            currentMessageRef.current.content += chunk.content.textDelta;
             break;
 
           case 'finish':
-            if (currentMessageRef.current.id && currentMessageRef.current.content) {
-              const message: Message = {
-                id: currentMessageRef.current.id,
-                role: 'assistant',
-                content: currentMessageRef.current.content,
-                createdAt: new Date(chunk.timestamp),
-                toolInvocations: currentMessageRef.current.toolInvocations,
-              };
-              onNewMessage?.(message);
-              
-              // Reset current message
-              currentMessageRef.current = {
-                content: '',
-                toolInvocations: [],
-              };
-            }
             break;
         }
       });
@@ -131,7 +142,7 @@ export function useStreamingData({
     setUsageData,
     setCurrentUserMessageId,
     currentUserMessageId,
-    onNewMessage,
+    setMessages,
   ]);
 
   return previousStatusesRef.current;

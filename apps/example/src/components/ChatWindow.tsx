@@ -53,13 +53,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
 
   const [statusUpdates, setStatusUpdates] = useState<string[]>([]);
   const [usageData, setUsageData] = useState<any>(null);
-
-  // Added state for currentUserMessageId
   const [currentUserMessageId, setCurrentUserMessageId] = useState<string | undefined>(undefined);
 
   const {
-    messages,
-    setMessages,
+    messages: chatMessages,
     metadata,
     input,
     handleInputChange,
@@ -71,6 +68,21 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
     api: '/api/chat',
     maxSteps: 5,
   });
+
+  // Keep track of streaming messages separately
+  const [streamingMessage, setStreamingMessage] = useState<Message | null>(null);
+
+  // Combine chat messages with streaming message
+  const messages = useMemo(() => {
+    if (!streamingMessage) return chatMessages;
+    
+    // Replace the last message if it's from the assistant and we have a streaming message
+    const baseMessages = chatMessages.filter(msg => 
+      !(msg.role === 'assistant' && msg.id === streamingMessage.id)
+    );
+    
+    return [...baseMessages, streamingMessage];
+  }, [chatMessages, streamingMessage]);
 
   const topRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -140,12 +152,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
     return lastMessage?.role === 'assistant' ? lastMessage.id : undefined;
   }, [messages]);
 
-  // Add message handler
-  const handleNewMessage = useCallback((message: Message) => {
-    setMessages(prev => [...prev, message]);
-  }, []);
-
-  // Update useStreamingData call
   const messageStatusUpdates = useStreamingData({
     streamingData,
     metadata,
@@ -153,7 +159,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
     setUsageData,
     setCurrentUserMessageId,
     currentUserMessageId,
-    onNewMessage: handleNewMessage,
+    setMessages: setStreamingMessage,
   });
 
   // Consolidate messages to prevent duplicates
