@@ -85,7 +85,7 @@ ${agentEntries.join("\n")}
     this.agent.setSystemPrompt(systemPrompt);
 
     // Send status update after setting system prompt
-    onUpdate?.('System prompt prepared');
+    // onUpdate?.('System prompt prepared');
 
     // Prepare messages
     const messages: Message[] = [
@@ -102,7 +102,7 @@ ${agentEntries.join("\n")}
     });
 
     // Send status update after classification
-    onUpdate?.('Classification completed');
+    // onUpdate?.('Classification completed');
 
     // Handle the response
     const parsedResult = await this.handleResponse(response);

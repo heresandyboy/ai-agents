@@ -24,7 +24,7 @@ export class AgentOrchestrator {
     options: GenerationOptions & { onUpdate?: (status: string) => void } = {}
   ): Promise<string | GenerationResponse | PortkeyStreamResponse | Response> {
     // Send a status update: Classifying input
-    options.onUpdate?.('Classifying input');
+    // options.onUpdate?.('Classifying input');
 
     // Classify the input to get the selected agent
     const classificationResult: ClassifierResult =

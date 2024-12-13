@@ -22,7 +22,8 @@ export function useStreamingData({
 }: StreamingDataHandlerProps) {
   const previousStatusesRef = useRef<Record<string, string[]>>({});
   const lastUpdateTimeRef = useRef<number>(0);
-  const UPDATE_INTERVAL = 500; // Update every 500ms
+  const processedChunksRef = useRef<Set<string>>(new Set());
+  const UPDATE_INTERVAL = 100;
 
   useEffect(() => {
     if (!streamingData) return;
@@ -32,34 +33,39 @@ export function useStreamingData({
     if (Array.isArray(dataChunk)) {
       // Process chunks
       dataChunk.forEach(chunk => {
-        console.log("chunk", JSON.stringify(chunk, null, 2));
+        // Create a unique key for the chunk
+        const chunkKey = `${chunk.type}-${chunk.timestamp}-${chunk.content || chunk.status}`;
+        
+        // Skip if we've already processed this chunk
+        if (processedChunksRef.current.has(chunkKey)) {
+          return;
+        }
+        
+        // Mark chunk as processed
+        processedChunksRef.current.add(chunkKey);
+
         const receivedAt = Date.now();
+        console.log('chunk', JSON.stringify(chunk, null, 2));
         console.log('difference', receivedAt - chunk.timestamp);
         console.log('differene in seconds', (receivedAt - chunk.timestamp) / 1000);
+
         if (chunk.type === 'user-message-id') {
-          // Set the current user message id
           setCurrentUserMessageId(chunk.content);
-          // Initialize status updates for this user message ID
           previousStatusesRef.current[chunk.content] = [];
-          // Reset current status updates
           setStatusUpdates([]);
         } else if (chunk.type === 'status') {
-          if (!currentUserMessageId) return; // Ensure we have the user message ID
-          // Initialize the array if not present
+          if (!currentUserMessageId) return;
+          
           if (!previousStatusesRef.current[currentUserMessageId]) {
             previousStatusesRef.current[currentUserMessageId] = [];
           }
+          
+          // Add the new status
           previousStatusesRef.current[currentUserMessageId].push(chunk.status);
-
-          // Throttle updates
-          const now = Date.now();
-          if (now - lastUpdateTimeRef.current > UPDATE_INTERVAL) {
-            lastUpdateTimeRef.current = now;
-            // Update current status updates for streaming display
-            setStatusUpdates([...previousStatusesRef.current[currentUserMessageId]]);
-          }
+          
+          // Update status updates immediately without debouncing
+          setStatusUpdates([...previousStatusesRef.current[currentUserMessageId]]);
         }
-        // ... handle other chunk types if needed ...
       });
     }
   }, [streamingData, setStatusUpdates, setUsageData, setCurrentUserMessageId, currentUserMessageId]);

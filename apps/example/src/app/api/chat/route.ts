@@ -51,6 +51,7 @@ const weatherAgent = new Agent(
   },
   agentLanguageModel,
   weatherToolRegistry
+  
 );
 
 const calculatorAgent = new Agent(
@@ -107,60 +108,69 @@ export async function POST(req: NextRequest) {
     timestamp: Date.now()
   });
 
-  // Start processing without awaiting the entire result
-  const resultPromise = orchestrator.process(
-    lastMessage.content,
-    conversationHistory,
-    {
-      stream: true,
-      onUpdate: (statusMessage: string) => {
-        streamingData.append({
-          type: 'status',
-          status: statusMessage,
-          timestamp: Date.now()
-        });
-      },
+  // Create the response stream immediately
+  const stream = new ReadableStream({
+    async start(controller) {
+      streamingData.stream.pipeTo(new WritableStream({
+        write(chunk) {
+          controller.enqueue(chunk);
+        }
+      }));
     }
-  );
+  });
 
-  // Return the response immediately
-  const response = resultPromise.then(async (result) => {
-    if ("textStream" in result) {
-      const assistantMessageId = generateUUID();
-      streamingData.appendMessageAnnotation({
-        messageIdFromServer: assistantMessageId,
-      });
+  // Process in the background without blocking the response
+  (async () => {
+    try {
+      const result = await orchestrator.process(
+        lastMessage.content,
+        conversationHistory,
+        {
+          stream: true,
+          onUpdate: (statusMessage: string) => {
+            streamingData.append({
+              type: 'status',
+              status: statusMessage,
+              timestamp: Date.now()
+            });
+          },
+        }
+      );
 
-      for await (const part of result.fullStream) {
-        if (part.type === 'text-delta') {
-          streamingData.append({
-            type: 'text-delta',
-            content: part.textDelta,
-            id: assistantMessageId
-          });
-        } else if (part.type === 'tool-call') {
-          streamingData.append({
-            type: 'tool-call',
-            data: part,
-            id: assistantMessageId
-          });
+      if ("textStream" in result) {
+        result.toDataStreamResponse
+        const assistantMessageId = generateUUID();
+        streamingData.appendMessageAnnotation({
+          messageIdFromServer: assistantMessageId,
+        });
+
+        for await (const part of result.fullStream) {
+          if (part.type === 'text-delta') {
+            streamingData.append({
+              type: 'text-delta',
+              content: part.textDelta,
+              id: assistantMessageId
+            });
+          } else if (part.type === 'tool-call') {
+            streamingData.append({
+              type: 'tool-call',
+              data: part,
+              id: assistantMessageId
+            });
+          }
         }
       }
+    } catch (error) {
+      console.error('Error processing request:', error);
+      streamingData.append({
+        type: 'error',
+        error: 'An error occurred processing your request',
+      });
+    } finally {
+      streamingData.close();
     }
+  })();
 
-    // Close the stream after processing
-    streamingData.close();
-  }).catch((error) => {
-    console.error('Error processing request:', error);
-    streamingData.append({
-      type: 'error',
-      error: 'An error occurred processing your request',
-    });
-    streamingData.close();
-  });
-
-  // Return the streaming response using toDataStreamResponse
-  return (await resultPromise).toDataStreamResponse({
-    data: streamingData,
-  });
+  // Return the stream immediately
+  return new Response(stream);
 }
