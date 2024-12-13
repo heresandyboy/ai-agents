@@ -1,6 +1,7 @@
 // src/ui/hooks/useStreamingData.ts
 'use client';
 
+import { type Message, type ToolInvocation } from 'ai';
 import { useEffect, useRef } from "react";
 
 interface StreamingDataHandlerProps {
@@ -9,7 +10,8 @@ interface StreamingDataHandlerProps {
   setStatusUpdates: React.Dispatch<React.SetStateAction<string[]>>;
   setUsageData: React.Dispatch<React.SetStateAction<any>>;
   setCurrentUserMessageId: React.Dispatch<React.SetStateAction<string | undefined>>;
-  currentUserMessageId?: string; // ID of the current user message
+  currentUserMessageId?: string;
+  onNewMessage?: (message: Message) => void;
 }
 
 export function useStreamingData({
@@ -19,11 +21,18 @@ export function useStreamingData({
   setUsageData,
   setCurrentUserMessageId,
   currentUserMessageId,
+  onNewMessage,
 }: StreamingDataHandlerProps) {
   const previousStatusesRef = useRef<Record<string, string[]>>({});
-  const lastUpdateTimeRef = useRef<number>(0);
   const processedChunksRef = useRef<Set<string>>(new Set());
-  const UPDATE_INTERVAL = 100;
+  const currentMessageRef = useRef<{
+    id?: string;
+    content: string;
+    toolInvocations: ToolInvocation[];
+  }>({
+    content: '',
+    toolInvocations: [],
+  });
 
   useEffect(() => {
     if (!streamingData) return;
@@ -31,44 +40,99 @@ export function useStreamingData({
     let dataChunk = streamingData;
 
     if (Array.isArray(dataChunk)) {
-      // Process chunks
       dataChunk.forEach(chunk => {
-        // Create a unique key for the chunk
-        const chunkKey = `${chunk.type}-${chunk.timestamp}-${chunk.content || chunk.status}`;
+        const chunkKey = `${chunk.type}-${chunk.timestamp}-${JSON.stringify(chunk.content)}`;
         
-        // Skip if we've already processed this chunk
         if (processedChunksRef.current.has(chunkKey)) {
           return;
         }
         
-        // Mark chunk as processed
         processedChunksRef.current.add(chunkKey);
 
-        const receivedAt = Date.now();
-        console.log('chunk', JSON.stringify(chunk, null, 2));
-        console.log('difference', receivedAt - chunk.timestamp);
-        console.log('differene in seconds', (receivedAt - chunk.timestamp) / 1000);
+        // Handle different chunk types
+        switch (chunk.type) {
+          case 'user-message-id':
+            setCurrentUserMessageId(chunk.content);
+            previousStatusesRef.current[chunk.content] = [];
+            setStatusUpdates([]);
+            break;
 
-        if (chunk.type === 'user-message-id') {
-          setCurrentUserMessageId(chunk.content);
-          previousStatusesRef.current[chunk.content] = [];
-          setStatusUpdates([]);
-        } else if (chunk.type === 'status') {
-          if (!currentUserMessageId) return;
-          
-          if (!previousStatusesRef.current[currentUserMessageId]) {
-            previousStatusesRef.current[currentUserMessageId] = [];
-          }
-          
-          // Add the new status
-          previousStatusesRef.current[currentUserMessageId].push(chunk.status);
-          
-          // Update status updates immediately without debouncing
-          setStatusUpdates([...previousStatusesRef.current[currentUserMessageId]]);
+          case 'status':
+            if (!currentUserMessageId) return;
+            if (!previousStatusesRef.current[currentUserMessageId]) {
+              previousStatusesRef.current[currentUserMessageId] = [];
+            }
+            previousStatusesRef.current[currentUserMessageId].push(chunk.status);
+            setStatusUpdates([...previousStatusesRef.current[currentUserMessageId]]);
+            break;
+
+          case 'tool-call':
+            if (!currentMessageRef.current.id) {
+              currentMessageRef.current.id = chunk.id;
+            }
+            // Map to ToolInvocation type
+            const toolCall: ToolInvocation = {
+              state: 'call',
+              toolCallId: chunk.content.toolCallId,
+              toolName: chunk.content.toolName,
+              args: chunk.content.args,
+            };
+            currentMessageRef.current.toolInvocations.push(toolCall);
+            break;
+
+          case 'tool-result':
+            // Find and update the corresponding tool call
+            const toolIndex = currentMessageRef.current.toolInvocations.findIndex(
+              t => t.toolCallId === chunk.content.toolCallId
+            );
+            if (toolIndex !== -1) {
+              const toolResult: ToolInvocation = {
+                state: 'result',
+                toolCallId: chunk.content.toolCallId,
+                toolName: chunk.content.toolName,
+                args: chunk.content.args,
+                result: chunk.content.result,
+              };
+              currentMessageRef.current.toolInvocations[toolIndex] = toolResult;
+            }
+            break;
+
+          case 'text-delta':
+            if (!currentMessageRef.current.id) {
+              currentMessageRef.current.id = chunk.id;
+            }
+            currentMessageRef.current.content += chunk.content.textDelta;
+            break;
+
+          case 'finish':
+            if (currentMessageRef.current.id && currentMessageRef.current.content) {
+              const message: Message = {
+                id: currentMessageRef.current.id,
+                role: 'assistant',
+                content: currentMessageRef.current.content,
+                createdAt: new Date(chunk.timestamp),
+                toolInvocations: currentMessageRef.current.toolInvocations,
+              };
+              onNewMessage?.(message);
+              
+              // Reset current message
+              currentMessageRef.current = {
+                content: '',
+                toolInvocations: [],
+              };
+            }
+            break;
         }
       });
     }
-  }, [streamingData, setStatusUpdates, setUsageData, setCurrentUserMessageId, currentUserMessageId]);
+  }, [
+    streamingData,
+    setStatusUpdates,
+    setUsageData,
+    setCurrentUserMessageId,
+    currentUserMessageId,
+    onNewMessage,
+  ]);
 
   return previousStatusesRef.current;
 }

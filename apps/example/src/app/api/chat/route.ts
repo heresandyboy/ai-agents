@@ -51,7 +51,6 @@ const weatherAgent = new Agent(
   },
   agentLanguageModel,
   weatherToolRegistry
-  
 );
 
 const calculatorAgent = new Agent(
@@ -77,6 +76,25 @@ const orchestrator = new AgentOrchestrator(classifierAgent, [
 
 function generateUUID() {
   return Math.random().toString(36).slice(2);
+}
+
+// Function to sanitize parts by converting Date objects to strings
+function sanitizeForJSON(value: any): any {
+  if (value instanceof Date) {
+    return value.toISOString();
+  } else if (Array.isArray(value)) {
+    return value.map(sanitizeForJSON);
+  } else if (value !== null && typeof value === 'object') {
+    const sanitizedObject: any = {};
+    for (const key in value) {
+      if (Object.prototype.hasOwnProperty.call(value, key)) {
+        sanitizedObject[key] = sanitizeForJSON(value[key]);
+      }
+    }
+    return sanitizedObject;
+  } else {
+    return value;
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -138,26 +156,26 @@ export async function POST(req: NextRequest) {
       );
 
       if ("textStream" in result) {
-        result.toDataStreamResponse
+        // Generate assistant message ID
         const assistantMessageId = generateUUID();
         streamingData.appendMessageAnnotation({
           messageIdFromServer: assistantMessageId,
         });
 
+        // Stream back all parts, including their types and content
         for await (const part of result.fullStream) {
-          if (part.type === 'text-delta') {
-            streamingData.append({
-              type: 'text-delta',
-              content: part.textDelta,
-              id: assistantMessageId
-            });
-          } else if (part.type === 'tool-call') {
-            streamingData.append({
-              type: 'tool-call',
-              data: part,
-              id: assistantMessageId
-            });
-          }
+          console.log('part', JSON.stringify(part, null, 2));
+
+          // Sanitize the part before appending
+          const sanitizedPart = sanitizeForJSON(part);
+
+          // Append each part dynamically with type, content, id, and timestamp
+          streamingData.append({
+            type: part.type,
+            content: sanitizedPart,
+            id: assistantMessageId,
+            timestamp: Date.now()
+          });
         }
       }
     } catch (error) {

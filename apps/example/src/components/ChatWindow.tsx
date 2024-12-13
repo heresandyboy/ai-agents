@@ -59,6 +59,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
 
   const {
     messages,
+    setMessages,
     metadata,
     input,
     handleInputChange,
@@ -139,7 +140,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
     return lastMessage?.role === 'assistant' ? lastMessage.id : undefined;
   }, [messages]);
 
-  // Store all status updates by message ID
+  // Add message handler
+  const handleNewMessage = useCallback((message: Message) => {
+    setMessages(prev => [...prev, message]);
+  }, []);
+
+  // Update useStreamingData call
   const messageStatusUpdates = useStreamingData({
     streamingData,
     metadata,
@@ -147,6 +153,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
     setUsageData,
     setCurrentUserMessageId,
     currentUserMessageId,
+    onNewMessage: handleNewMessage,
   });
 
   // Consolidate messages to prevent duplicates
