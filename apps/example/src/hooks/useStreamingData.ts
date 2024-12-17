@@ -31,9 +31,11 @@ export function useStreamingData({
     id?: string;
     content: string;
     toolInvocations: ToolInvocation[];
+    statusUpdates: string[];
   }>({
     content: '',
     toolInvocations: [],
+    statusUpdates: [],
   });
 
   const contentBufferRef = useRef<string>('');
@@ -52,6 +54,7 @@ export function useStreamingData({
           currentMessageRef.current = {
             content: '',
             toolInvocations: [],
+            statusUpdates: [],
           };
           setCurrentUserMessageId(chunk.content);
           previousStatusesRef.current[chunk.content] = [];
@@ -64,7 +67,8 @@ export function useStreamingData({
             previousStatusesRef.current[currentUserMessageId] = [];
           }
           previousStatusesRef.current[currentUserMessageId].push(chunk.status);
-          setStatusUpdates([...previousStatusesRef.current[currentUserMessageId]]);
+          currentMessageRef.current.statusUpdates.push(chunk.status);
+          setStatusUpdates([...currentMessageRef.current.statusUpdates]);
           break;
 
         case 'tool-call':
@@ -154,6 +158,13 @@ export function useStreamingData({
 
         case 'finish':
           setIsLoading(false);
+          if (currentMessageRef.current.id) {
+            setMessages(prevMessages => prevMessages.map(msg =>
+              msg.id === currentMessageRef.current.id
+                ? { ...msg, statusUpdates: [...currentMessageRef.current.statusUpdates] }
+                : msg
+            ));
+          }
           break;
       }
     },

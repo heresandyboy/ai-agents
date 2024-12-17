@@ -5,13 +5,13 @@ import UsageDataComponent from '@/components/UsageDataComponent';
 import { useSettings } from '@/context/SettingsContext';
 import { useDocumentEffect } from '@/hooks/useDocumentEffect';
 import { useStreamingData } from '@/hooks/useStreamingData';
+import { generateUUID } from '@/lib/utils';
 import { type Message as AIMessage } from 'ai';
 import { useChat } from 'ai/react';
 import { ArrowDown, ArrowUp } from 'lucide-react';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import ChatInput from './ChatInput';
 import MessageComponent from './Message';
-import { generateUUID } from '@/lib/utils';
 
 
 export interface Message extends AIMessage {
@@ -187,6 +187,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
 
         {messages.map((msg, index) => (
           <React.Fragment key={msg.id}>
+            {msg.statusUpdates && msg.statusUpdates.length > 0 && (
+              <StatusUpdatesComponent 
+                statusUpdates={msg.statusUpdates}
+                isLoading={false}
+              />
+            )}
             <MessageComponent
               message={msg}
               isLoading={isLoading && index === messages.length - 1}
