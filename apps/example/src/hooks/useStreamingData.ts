@@ -11,7 +11,7 @@ interface StreamingDataHandlerProps {
   setUsageData: React.Dispatch<React.SetStateAction<any>>;
   setCurrentUserMessageId: React.Dispatch<React.SetStateAction<string | undefined>>;
   currentUserMessageId?: string;
-  setMessages: React.Dispatch<React.SetStateAction<Message | null>>;
+  setMessages: React.Dispatch<React.SetStateAction<Message>>;
   setIsLoading: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
@@ -70,13 +70,16 @@ export function useStreamingData({
         case 'tool-call':
           if (!currentMessageRef.current.id) {
             currentMessageRef.current.id = chunk.id;
-            setMessages({
-              id: chunk.id,
-              role: 'assistant',
-              content: '',
-              toolInvocations: [],
-              createdAt: new Date(chunk.timestamp),
-            });
+            setMessages(prevMessages => [
+              ...prevMessages,
+              {
+                id: chunk.id,
+                role: 'assistant',
+                content: '',
+                toolInvocations: [],
+                createdAt: new Date(chunk.timestamp),
+              }
+            ]);
           }
           const toolCall: ToolInvocation = {
             state: 'call',
@@ -88,10 +91,11 @@ export function useStreamingData({
             ...currentMessageRef.current.toolInvocations,
             toolCall,
           ];
-          setMessages(current => current ? {
-            ...current,
-            toolInvocations: [...currentMessageRef.current.toolInvocations]
-          } : null);
+          setMessages(prevMessages => prevMessages.map(msg =>
+            msg.id === currentMessageRef.current.id
+              ? { ...msg, toolInvocations: [...currentMessageRef.current.toolInvocations] }
+              : msg
+          ));
           break;
 
         case 'tool-result':
@@ -107,35 +111,41 @@ export function useStreamingData({
               result: chunk.content.result,
             };
             currentMessageRef.current.toolInvocations[toolIndex] = toolResult;
-            setMessages(current => current ? {
-              ...current,
-              toolInvocations: [...currentMessageRef.current.toolInvocations]
-            } : null);
+            setMessages(prevMessages => prevMessages.map(msg =>
+              msg.id === currentMessageRef.current.id
+                ? { ...msg, toolInvocations: [...currentMessageRef.current.toolInvocations] }
+                : msg
+            ));
           }
           break;
 
         case 'text-delta':
           if (!currentMessageRef.current.id) {
             currentMessageRef.current.id = chunk.id;
-            setMessages({
+            const newMessage = {
               id: chunk.id,
               role: 'assistant',
               content: chunk.content.textDelta,
               toolInvocations: [],
               createdAt: new Date(chunk.timestamp),
-            });
+            };
+            setMessages(newMessage);
           } else {
             contentBufferRef.current += chunk.content.textDelta;
             if (!updateTimeoutRef.current) {
               updateTimeoutRef.current = setTimeout(() => {
                 currentMessageRef.current.content += contentBufferRef.current;
-                setMessages(current => current ? {
-                  ...current,
-                  content: currentMessageRef.current.content
-                } : null);
+                const updatedMessage = {
+                  id: currentMessageRef.current.id!,
+                  role: 'assistant',
+                  content: currentMessageRef.current.content,
+                  toolInvocations: currentMessageRef.current.toolInvocations,
+                  createdAt: new Date(),
+                };
+                setMessages(updatedMessage);
                 contentBufferRef.current = '';
                 updateTimeoutRef.current = null;
-              }, 100); // Update every 100ms
+              }, 100);
             }
           }
           break;

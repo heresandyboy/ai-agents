@@ -64,7 +64,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
     isLoading,
     data: streamingData,
     stop,
-
   } = useChat({
     api: '/api/chat',
     maxSteps: 5,
@@ -74,7 +73,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
   const [streamingMessage, setStreamingMessage] = useState<Message | null>(null);
 
   // Combine chat messages with streaming message
-  const messages = useMemo(() => {
+  const combinedMessages = useMemo(() => {
     if (!streamingMessage) return chatMessages;
     
     // Replace the last message if it's from the assistant and we have a streaming message
@@ -149,13 +148,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
       setIsScrollable(isContentScrollable);
       console.log('Content is scrollable:', isContentScrollable);
     }
-  }, [messages, statusUpdates, isAtBottom]);
+  }, [combinedMessages, statusUpdates, isAtBottom]);
 
   // Get the current assistant message ID
   const currentAssistantMessageId = useMemo(() => {
-    const lastMessage = messages[messages.length - 1];
+    const lastMessage = combinedMessages[combinedMessages.length - 1];
     return lastMessage?.role === 'assistant' ? lastMessage.id : undefined;
-  }, [messages]);
+  }, [combinedMessages]);
 
   const messageStatusUpdates = useStreamingData({
     streamingData,
@@ -164,43 +163,24 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
     setUsageData,
     setCurrentUserMessageId,
     currentUserMessageId,
-    setMessages: setStreamingMessage,
+    setMessages: (messageUpdate) => {
+      if (Array.isArray(messageUpdate)) {
+        setStreamingMessage(messageUpdate[messageUpdate.length - 1]);
+      } else if (typeof messageUpdate === 'function') {
+        setStreamingMessage(prev => {
+          const result = messageUpdate(prev ? [prev] : []);
+          return Array.isArray(result) ? result[result.length - 1] : null;
+        });
+      } else {
+        setStreamingMessage(messageUpdate);
+      }
+    },
     setIsLoading: (loading) => {
       if (!loading) {
         stop();
       }
     },
   });
-
-  // Consolidate messages to prevent duplicates
-  const consolidatedMessages = useMemo(() => {
-    return messages.reduce((acc, current, index, array) => {
-      // If this is a tool invocation message
-      if (current.toolInvocations?.length) {
-        // Look ahead to see if the next message is the completion
-        const nextMessage = array[index + 1];
-        if (nextMessage && 
-            nextMessage.role === 'assistant' && 
-            !nextMessage.toolInvocations &&
-            current.createdAt === nextMessage.createdAt) {
-          // Combine the messages
-          acc.push({
-            ...current,
-            content: nextMessage.content,
-            id: current.id, // Keep the first ID
-            revisionId: nextMessage.revisionId
-          });
-        } else {
-          acc.push(current);
-        }
-      } else if (!array[index - 1]?.toolInvocations) {
-        // Only add non-tool messages if they're not part of a tool call
-        acc.push(current);
-      }
-
-      return acc;
-    }, [] as typeof messages);
-  }, [messages]);
 
   return (
     <div className="relative flex flex-col h-full">
@@ -221,7 +201,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
       >
         <div ref={topRef} className="scroll-mt-16" />
 
-        {messages.map((msg, index) => (
+        {combinedMessages.map((msg, index) => (
           <React.Fragment key={msg.id}>
             {/* Only show status updates for the current streaming message */}
             {msg.role === 'assistant' && 
@@ -229,12 +209,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
              messageStatusUpdates[currentUserMessageId ?? ''] && (
               <StatusUpdatesComponent 
                 statusUpdates={messageStatusUpdates[currentUserMessageId ?? '']}
-                isLoading={isLoading && index === messages.length - 1}
+                isLoading={isLoading && index === combinedMessages.length - 1}
               />
             )}
             <MessageComponent
               message={msg}
-              isLoading={isLoading && index === messages.length - 1}
+              isLoading={isLoading && index === combinedMessages.length - 1}
             />
           </React.Fragment>
         ))}
