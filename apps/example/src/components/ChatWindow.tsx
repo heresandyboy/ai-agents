@@ -55,8 +55,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
   const [usageData, setUsageData] = useState<any>(null);
   const [currentUserMessageId, setCurrentUserMessageId] = useState<string | undefined>(undefined);
 
+  const [messages, setMessages] = useState<Message[]>([]);
+
   const {
-    messages: chatMessages,
     metadata,
     input,
     handleInputChange,
@@ -69,20 +70,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
     maxSteps: 5,
   });
 
-  // Keep track of streaming messages separately
-  const [streamingMessage, setStreamingMessage] = useState<Message | null>(null);
-
-  // Combine chat messages with streaming message
-  const combinedMessages = useMemo(() => {
-    if (!streamingMessage) return chatMessages;
-    
-    // Replace the last message if it's from the assistant and we have a streaming message
-    const baseMessages = chatMessages.filter(msg => 
-      !(msg.role === 'assistant' && msg.id === streamingMessage.id)
-    );
-    
-    return [...baseMessages, streamingMessage];
-  }, [chatMessages, streamingMessage]);
+  const combinedMessages = messages;
 
   const topRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -156,29 +144,19 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
     return lastMessage?.role === 'assistant' ? lastMessage.id : undefined;
   }, [combinedMessages]);
 
-  const messageStatusUpdates = useStreamingData({
+  useStreamingData({
     streamingData,
     metadata,
     setStatusUpdates,
     setUsageData,
     setCurrentUserMessageId,
     currentUserMessageId,
-    setMessages: (messageUpdate) => {
-      if (Array.isArray(messageUpdate)) {
-        setStreamingMessage(messageUpdate[messageUpdate.length - 1]);
-      } else if (typeof messageUpdate === 'function') {
-        setStreamingMessage(prev => {
-          const result = messageUpdate(prev ? [prev] : []);
-          return Array.isArray(result) ? result[result.length - 1] : null;
-        });
-      } else {
-        setStreamingMessage(messageUpdate);
-      }
-    },
+    setMessages,
     setIsLoading: (loading) => {
       if (!loading) {
         stop();
       }
+      // setIsLoading(loading);
     },
   });
 
@@ -203,15 +181,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
 
         {combinedMessages.map((msg, index) => (
           <React.Fragment key={msg.id}>
-            {/* Only show status updates for the current streaming message */}
-            {msg.role === 'assistant' && 
-             msg.id === streamingMessage?.id && 
-             messageStatusUpdates[currentUserMessageId ?? ''] && (
-              <StatusUpdatesComponent 
-                statusUpdates={messageStatusUpdates[currentUserMessageId ?? '']}
-                isLoading={isLoading && index === combinedMessages.length - 1}
-              />
-            )}
             <MessageComponent
               message={msg}
               isLoading={isLoading && index === combinedMessages.length - 1}
@@ -220,7 +189,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
         ))}
 
         {/* Show current status updates only if we don't have a streaming message yet */}
-        {isLoading && !streamingMessage && statusUpdates.length > 0 && (
+        {isLoading && statusUpdates.length > 0 && (
           <StatusUpdatesComponent 
             statusUpdates={statusUpdates}
             isLoading={true}

@@ -11,7 +11,7 @@ interface StreamingDataHandlerProps {
   setUsageData: React.Dispatch<React.SetStateAction<any>>;
   setCurrentUserMessageId: React.Dispatch<React.SetStateAction<string | undefined>>;
   currentUserMessageId?: string;
-  setMessages: React.Dispatch<React.SetStateAction<Message>>;
+  setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
   setIsLoading: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
@@ -122,31 +122,29 @@ export function useStreamingData({
         case 'text-delta':
           if (!currentMessageRef.current.id) {
             currentMessageRef.current.id = chunk.id;
-            const newMessage = {
+            currentMessageRef.current.content = chunk.content.textDelta;
+
+            const newMessage: Message = {
               id: chunk.id,
               role: 'assistant',
               content: chunk.content.textDelta,
-              toolInvocations: [],
+              toolInvocations: currentMessageRef.current.toolInvocations,
               createdAt: new Date(chunk.timestamp),
             };
-            setMessages(prevMessages => [...prevMessages, newMessage]);
+
+            setMessages((prevMessages) => [...prevMessages, newMessage]);
           } else {
             contentBufferRef.current += chunk.content.textDelta;
             if (!updateTimeoutRef.current) {
               updateTimeoutRef.current = setTimeout(() => {
                 currentMessageRef.current.content += contentBufferRef.current;
-                const updatedMessage = {
-                  id: currentMessageRef.current.id!,
-                  role: 'assistant',
-                  content: currentMessageRef.current.content,
-                  toolInvocations: currentMessageRef.current.toolInvocations,
-                  createdAt: new Date(),
-                };
-                setMessages(prevMessages => prevMessages.map(msg =>
-                  msg.id === currentMessageRef.current.id
-                    ? { ...msg, content: updatedMessage.content }
-                    : msg
-                ));
+                setMessages((prevMessages) =>
+                  prevMessages.map((msg) =>
+                    msg.id === currentMessageRef.current.id
+                      ? { ...msg, content: currentMessageRef.current.content }
+                      : msg
+                  )
+                );
                 contentBufferRef.current = '';
                 updateTimeoutRef.current = null;
               }, 100);
@@ -159,7 +157,13 @@ export function useStreamingData({
           break;
       }
     },
-    [currentUserMessageId, setCurrentUserMessageId, setStatusUpdates, setMessages, setIsLoading]
+    [
+      currentUserMessageId,
+      setCurrentUserMessageId,
+      setStatusUpdates,
+      setMessages,
+      setIsLoading,
+    ]
   );
 
   useEffect(() => {
