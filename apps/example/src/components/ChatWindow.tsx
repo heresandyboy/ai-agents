@@ -29,7 +29,7 @@ function debounce<T extends (...args: any[]) => any>(
   wait: number
 ): T & { cancel: () => void } {
   let timeout: NodeJS.Timeout;
-  
+
   const debounced = (...args: Parameters<T>) => {
     clearTimeout(timeout);
     timeout = setTimeout(() => func(...args), wait);
@@ -187,25 +187,36 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
 
         {messages.map((msg, index) => (
           <React.Fragment key={msg.id}>
-            {msg.statusUpdates && msg.statusUpdates.length > 0 && (
-              <StatusUpdatesComponent 
-                statusUpdates={msg.statusUpdates}
-                isLoading={false}
-              />
+            {msg.role === 'assistant' && (
+              <>
+                {msg.statusUpdates && msg.statusUpdates.length > 0 && (
+                  <StatusUpdatesComponent
+                    statusUpdates={msg.statusUpdates}
+                    isLoading={false}
+                  />
+                )}
+                <MessageComponent
+                  message={msg}
+                  isLoading={isLoading && index === messages.length - 1}
+                />
+              </>
             )}
-            <MessageComponent
-              message={msg}
-              isLoading={isLoading && index === messages.length - 1}
-            />
+            {msg.role !== 'assistant' && (
+              <>
+                <MessageComponent
+                  message={msg}
+                  isLoading={isLoading && index === messages.length - 1}
+                />
+                {isLoading && index === messages.length - 1 && (
+                  <StatusUpdatesComponent
+                    statusUpdates={statusUpdates}
+                    isLoading={true}
+                  />
+                )}
+              </>
+            )}
           </React.Fragment>
         ))}
-
-        {isLoading && statusUpdates.length > 0 && (
-          <StatusUpdatesComponent 
-            statusUpdates={statusUpdates}
-            isLoading={true}
-          />
-        )}
 
         {usageData && <UsageDataComponent usage={usageData} />}
 
