@@ -2,7 +2,7 @@
 'use client';
 
 import { type Message, type ToolInvocation } from 'ai';
-import { useEffect, useRef, useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 interface StreamingDataHandlerProps {
   streamingData: any;
@@ -35,6 +35,9 @@ export function useStreamingData({
     content: '',
     toolInvocations: [],
   });
+
+  const contentBufferRef = useRef<string>('');
+  const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const processChunk = useCallback(
     (chunk: any) => {
@@ -122,11 +125,18 @@ export function useStreamingData({
               createdAt: new Date(chunk.timestamp),
             });
           } else {
-            currentMessageRef.current.content += chunk.content.textDelta;
-            setMessages(current => current ? {
-              ...current,
-              content: currentMessageRef.current.content
-            } : null);
+            contentBufferRef.current += chunk.content.textDelta;
+            if (!updateTimeoutRef.current) {
+              updateTimeoutRef.current = setTimeout(() => {
+                currentMessageRef.current.content += contentBufferRef.current;
+                setMessages(current => current ? {
+                  ...current,
+                  content: currentMessageRef.current.content
+                } : null);
+                contentBufferRef.current = '';
+                updateTimeoutRef.current = null;
+              }, 100); // Update every 100ms
+            }
           }
           break;
 

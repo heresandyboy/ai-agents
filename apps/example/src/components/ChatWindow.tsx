@@ -114,12 +114,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
       if (!containerRef.current) return;
       const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
       const atBottom = scrollHeight - scrollTop - clientHeight < 100; // 100px threshold
+      console.log('Scroll position:', { scrollTop, scrollHeight, clientHeight, atBottom });
       setIsAtBottom(atBottom);
     }, 100), // Debounce delay of 100ms
     []
   );
 
   useEffect(() => {
+    console.log('Effect: Adding scroll event listener');
     const container = containerRef.current;
     if (container) {
       container.addEventListener('scroll', handleScroll);
@@ -127,23 +129,25 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
       handleScroll();
     }
     return () => {
+      console.log('Effect cleanup: Removing scroll event listener');
       container?.removeEventListener('scroll', handleScroll);
     };
   }, [handleScroll]);
 
   useEffect(() => {
-    // Only scroll if the user is at the bottom
+    console.log('Effect: Checking if should scroll to bottom');
     if (isAtBottom) {
+      console.log('Scrolling to bottom');
       requestAnimationFrame(() => {
         bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
       });
     }
 
-    // Check if scrolling is needed
     const container = containerRef.current;
     if (container) {
       const isContentScrollable = container.scrollHeight > container.clientHeight;
       setIsScrollable(isContentScrollable);
+      console.log('Content is scrollable:', isContentScrollable);
     }
   }, [messages, statusUpdates, isAtBottom]);
 
