@@ -129,7 +129,7 @@ export function useStreamingData({
               toolInvocations: [],
               createdAt: new Date(chunk.timestamp),
             };
-            setMessages(newMessage);
+            setMessages(prevMessages => [...prevMessages, newMessage]);
           } else {
             contentBufferRef.current += chunk.content.textDelta;
             if (!updateTimeoutRef.current) {
@@ -142,7 +142,11 @@ export function useStreamingData({
                   toolInvocations: currentMessageRef.current.toolInvocations,
                   createdAt: new Date(),
                 };
-                setMessages(updatedMessage);
+                setMessages(prevMessages => prevMessages.map(msg =>
+                  msg.id === currentMessageRef.current.id
+                    ? { ...msg, content: updatedMessage.content }
+                    : msg
+                ));
                 contentBufferRef.current = '';
                 updateTimeoutRef.current = null;
               }, 100);
