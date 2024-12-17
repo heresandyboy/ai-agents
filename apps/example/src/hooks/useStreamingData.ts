@@ -151,7 +151,7 @@ export function useStreamingData({
                 );
                 contentBufferRef.current = '';
                 updateTimeoutRef.current = null;
-              }, 100);
+              }, 50);
             }
           }
           break;
