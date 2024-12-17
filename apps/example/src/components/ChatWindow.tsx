@@ -11,6 +11,7 @@ import { ArrowDown, ArrowUp } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ChatInput from './ChatInput';
 import MessageComponent from './Message';
+import { generateUUID } from '@/lib/utils';
 
 
 export interface Message extends AIMessage {
@@ -61,7 +62,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
     metadata,
     input,
     handleInputChange,
-    handleSubmit,
+    handleSubmit: originalHandleSubmit,
     isLoading,
     data: streamingData,
     stop,
@@ -70,7 +71,21 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
     maxSteps: 5,
   });
 
-  const combinedMessages = messages;
+  const handleSubmit = useCallback((event?: React.FormEvent<HTMLFormElement>) => {
+    if (event) {
+      event.preventDefault();
+    }
+    if (!isLoading && input.trim()) {
+      const userMessage: Message = {
+        id: generateUUID(),
+        role: 'user',
+        content: input,
+        createdAt: new Date(),
+      };
+      setMessages((prevMessages) => [...prevMessages, userMessage]);
+      originalHandleSubmit(event);
+    }
+  }, [input, isLoading, originalHandleSubmit]);
 
   const topRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -95,36 +110,29 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
     }
   }, []);
 
-  // Debounced handleScroll function
   const handleScroll = useCallback(
     debounce(() => {
       if (!containerRef.current) return;
       const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
-      const atBottom = scrollHeight - scrollTop - clientHeight < 100; // 100px threshold
-      console.log('Scroll position:', { scrollTop, scrollHeight, clientHeight, atBottom });
+      const atBottom = scrollHeight - scrollTop - clientHeight < 100;
       setIsAtBottom(atBottom);
-    }, 100), // Debounce delay of 100ms
+    }, 100),
     []
   );
 
   useEffect(() => {
-    console.log('Effect: Adding scroll event listener');
     const container = containerRef.current;
     if (container) {
       container.addEventListener('scroll', handleScroll);
-      // Initial check
       handleScroll();
     }
     return () => {
-      console.log('Effect cleanup: Removing scroll event listener');
       container?.removeEventListener('scroll', handleScroll);
     };
   }, [handleScroll]);
 
   useEffect(() => {
-    console.log('Effect: Checking if should scroll to bottom');
     if (isAtBottom) {
-      console.log('Scrolling to bottom');
       requestAnimationFrame(() => {
         bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
       });
@@ -134,15 +142,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
     if (container) {
       const isContentScrollable = container.scrollHeight > container.clientHeight;
       setIsScrollable(isContentScrollable);
-      console.log('Content is scrollable:', isContentScrollable);
     }
-  }, [combinedMessages, statusUpdates, isAtBottom]);
-
-  // Get the current assistant message ID
-  const currentAssistantMessageId = useMemo(() => {
-    const lastMessage = combinedMessages[combinedMessages.length - 1];
-    return lastMessage?.role === 'assistant' ? lastMessage.id : undefined;
-  }, [combinedMessages]);
+  }, [messages, statusUpdates, isAtBottom]);
 
   useStreamingData({
     streamingData,
@@ -151,12 +152,17 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
     setUsageData,
     setCurrentUserMessageId,
     currentUserMessageId,
-    setMessages,
+    setMessages: (messageUpdate) => {
+      if (Array.isArray(messageUpdate)) {
+        setMessages((prevMessages) => [...prevMessages, ...messageUpdate]);
+      } else if (typeof messageUpdate === 'function') {
+        setMessages((prevMessages) => messageUpdate(prevMessages));
+      }
+    },
     setIsLoading: (loading) => {
       if (!loading) {
         stop();
       }
-      // setIsLoading(loading);
     },
   });
 
@@ -179,16 +185,15 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
       >
         <div ref={topRef} className="scroll-mt-16" />
 
-        {combinedMessages.map((msg, index) => (
+        {messages.map((msg, index) => (
           <React.Fragment key={msg.id}>
             <MessageComponent
               message={msg}
-              isLoading={isLoading && index === combinedMessages.length - 1}
+              isLoading={isLoading && index === messages.length - 1}
             />
           </React.Fragment>
         ))}
 
-        {/* Show current status updates only if we don't have a streaming message yet */}
         {isLoading && statusUpdates.length > 0 && (
           <StatusUpdatesComponent 
             statusUpdates={statusUpdates}
@@ -196,7 +201,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ isSidebarOpen }) => {
           />
         )}
 
-        {/* Usage Data */}
         {usageData && <UsageDataComponent usage={usageData} />}
 
         <div ref={bottomRef} className="scroll-mb-24" />
