@@ -5,6 +5,7 @@ import {
   LanguageModelFactory,
   ToolRegistry,
   type Message,
+  type OpenAIAssistantLanguageModelConfig,
   type PortkeyLanguageModelConfig,
 } from "@zen/ai-agent-sdk";
 import { type NextRequest } from "next/server";
@@ -53,15 +54,39 @@ const weatherAgent = new Agent(
   weatherToolRegistry
 );
 
-const calculatorAgent = new Agent(
+// const calculatorAgent = new Agent(
+//   {
+//     name: "calculator-agent",
+//     description: "Performs mathematical calculations.",
+//     capabilities: ["math", "calculations"],
+//     systemPrompt:
+//       "You are a calculator assistant that can perform mathematical operations. Use the 'calculator' tool to evaluate expressions.",
+//   },
+//   agentLanguageModel,
+//   calculatorToolRegistry
+// );
+
+const assistantConfig: OpenAIAssistantLanguageModelConfig = {
+  assistantId: process.env.GENERATED_OPENAI_ASSISTANT_ID!, // TODO: AA - This needs to be optional, to create one, then some way to update the real ID - no idea yet (manual urgh)
+  llmRouterProvider: "openai-assistant",
+  name: "Math Assistant",
+  description: "A helpful math assistant",
+  instructions: "You are a helpful math assistant. You can perform calculations using the calculator tool. Always show your work and explain your thinking.",
+  providerApiKey: process.env.OPENAI_API_KEY_TESTING!,
+  model: "gpt-4o-mini",
+  temperature: 0.1,
+};
+
+const assistantLanguageModel = LanguageModelFactory.createOpenAIAssistant(assistantConfig);
+
+const mathOpenAIAssistant = new Agent(
   {
-    name: "calculator-agent",
-    description: "Performs mathematical calculations.",
-    capabilities: ["math", "calculations"],
-    systemPrompt:
-      "You are a calculator assistant that can perform mathematical operations. Use the 'calculator' tool to evaluate expressions.",
+    name: "Math Assistant",
+    description: "A helpful math assistant",
+    maxSteps: 5,
+    temperature: 0.1,
   },
-  agentLanguageModel,
+  assistantLanguageModel,
   calculatorToolRegistry
 );
 
@@ -71,7 +96,7 @@ const classifierAgent = new AgentClassifier(agentLanguageModel);
 // Create the orchestrator
 const orchestrator = new AgentOrchestrator(classifierAgent, [
   weatherAgent,
-  calculatorAgent,
+  mathOpenAIAssistant,
 ]);
 
 function generateUUID() {
@@ -91,6 +116,7 @@ function sanitizeForJSON(value: any): any {
         sanitizedObject[key] = sanitizeForJSON(value[key]);
       }
     }
+    console.log('sanitizedObject', JSON.stringify(sanitizedObject, null, 2));
     return sanitizedObject;
   } else {
     return value;
