@@ -18,7 +18,7 @@ interface MessageProps {
   setBlock?: React.Dispatch<React.SetStateAction<any>>;
 }
 
-const MessageComponent: FC<MessageProps> = ({ message, isLoading, block, setBlock }) => {
+const MessageComponent: FC<MessageProps> = memo(({ message, isLoading, block, setBlock }) => {
   // console.log("message", message);
   const messageRef = useRef<HTMLDivElement>(null);
   const topRef = useRef<HTMLDivElement>(null);
@@ -76,6 +76,9 @@ const MessageComponent: FC<MessageProps> = ({ message, isLoading, block, setBloc
     return !isLoading;
   }, [isLoading]);
 
+  // Format the timestamp
+  const formattedTimestamp = new Date(message.createdAt).toLocaleString();
+
   return (
     <motion.div
       ref={messageRef}
@@ -89,16 +92,21 @@ const MessageComponent: FC<MessageProps> = ({ message, isLoading, block, setBloc
     >
       <div ref={topRef} className="scroll-mt-16" />
 
-      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-        {message.role === 'assistant' && message.agentName ? (
-          `${message.agentName} (Assistant)`
-        ) : (
-          message.role.charAt(0).toUpperCase() + message.role.slice(1)
-        )}
-      </p>
+      <div className="flex justify-between items-center mb-2">
+        <p className="text-sm text-gray-600 dark:text-gray-400">
+          {message.role === 'assistant' && message.agentName ? (
+            `${message.agentName} (Assistant)`
+          ) : (
+            message.role.charAt(0).toUpperCase() + message.role.slice(1)
+          )}
+        </p>
+        <span className="text-xs text-gray-500 dark:text-gray-400">
+          {formattedTimestamp}
+        </span>
+      </div>
 
-      {/* Tool Invocation Status */}
-      {message.toolInvocations && (
+      {/* Conditionally render Tool Invocation Status */}
+      {message.toolInvocations && message.toolInvocations.length > 0 && (
         <ToolInvocationStatus
           toolInvocations={message.toolInvocations}
           isLoading={isLoading || false}
@@ -169,13 +177,10 @@ const MessageComponent: FC<MessageProps> = ({ message, isLoading, block, setBloc
       )}
     </motion.div>
   );
-};
-
-// Memoize the component to prevent unnecessary re-renders
-export default memo(
-  MessageComponent,
-  (prevProps, nextProps) =>
-    prevProps.message.id === nextProps.message.id &&
-    prevProps.message.content === nextProps.message.content &&
-    prevProps.isLoading === nextProps.isLoading
+}, (prevProps, nextProps) =>
+  prevProps.message.id === nextProps.message.id &&
+  prevProps.message.content === nextProps.message.content &&
+  prevProps.isLoading === nextProps.isLoading
 );
+
+export default MessageComponent;

@@ -37,6 +37,9 @@ export class AgentOrchestrator {
 
     const selectedAgentName = classificationResult.selectedAgent;
 
+    // options.onUpdate?.(`${classificationResult.reasoning}`);
+    // options.onUpdate?.(`Confidence: ${classificationResult.confidence}`);
+
     options.onUpdate?.(`Agent '${selectedAgentName}' responding`);
 
     console.log(`Classifier selected agent: ${selectedAgentName}`);

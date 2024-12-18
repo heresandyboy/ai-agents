@@ -92,11 +92,10 @@ const ToolInvocationStatus: React.FC<ToolInvocationStatusProps> = ({
         onClick={() => setIsExpanded(!isExpanded)}
         className="flex items-center justify-between w-full p-2 text-left bg-gray-100 dark:bg-gray-800 rounded-t"
       >
-        <span className="font-semibold flex items-center">
-          Thoughts
+        <span className="font-semibold flex items-center">          
           {latestTool && (
             <>
-              <span className="mx-2">-</span>
+              {/* <span className="mx-2">-</span> */}
               <span>{latestTool.toolName}</span>
               <span className="mx-1">({latestTool.state || 'pending'})</span>
             </>
