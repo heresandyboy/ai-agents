@@ -23,8 +23,7 @@ import {
 const log = debug("llm:openai-assistant");
 
 export class OpenAIAssistantLanguageModel
-  implements ILanguageModel<OpenAIAssistantLanguageModelConfig>
-{
+  implements ILanguageModel<OpenAIAssistantLanguageModelConfig> {
   private client: OpenAI;
   private threadId: string | null = null;
   private assistant: OpenAI.Beta.Assistants.Assistant | null = null;

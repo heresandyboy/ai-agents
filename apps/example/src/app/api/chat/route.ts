@@ -7,6 +7,7 @@ import {
   type Message,
   type OpenAIAssistantLanguageModelConfig,
   type PortkeyLanguageModelConfig,
+  type PortkeyStreamResponse,
 } from "@zen/ai-agent-sdk";
 import { type NextRequest } from "next/server";
 
@@ -54,20 +55,8 @@ const weatherAgent = new Agent(
   weatherToolRegistry
 );
 
-// const calculatorAgent = new Agent(
-//   {
-//     name: "calculator-agent",
-//     description: "Performs mathematical calculations.",
-//     capabilities: ["math", "calculations"],
-//     systemPrompt:
-//       "You are a calculator assistant that can perform mathematical operations. Use the 'calculator' tool to evaluate expressions.",
-//   },
-//   agentLanguageModel,
-//   calculatorToolRegistry
-// );
-
 const assistantConfig: OpenAIAssistantLanguageModelConfig = {
-  assistantId: process.env.GENERATED_OPENAI_ASSISTANT_ID!, // TODO: AA - This needs to be optional, to create one, then some way to update the real ID - no idea yet (manual urgh)
+  assistantId: process.env.GENERATED_OPENAI_ASSISTANT_ID!,
   llmRouterProvider: "openai-assistant",
   name: "Math Assistant",
   description: "A helpful math assistant",
@@ -101,26 +90,6 @@ const orchestrator = new AgentOrchestrator(classifierAgent, [
 
 function generateUUID() {
   return Math.random().toString(36).slice(2);
-}
-
-// Function to sanitize parts by converting Date objects to strings
-function sanitizeForJSON(value: any): any {
-  if (value instanceof Date) {
-    return value.toISOString();
-  } else if (Array.isArray(value)) {
-    return value.map(sanitizeForJSON);
-  } else if (value !== null && typeof value === 'object') {
-    const sanitizedObject: any = {};
-    for (const key in value) {
-      if (Object.prototype.hasOwnProperty.call(value, key)) {
-        sanitizedObject[key] = sanitizeForJSON(value[key]);
-      }
-    }
-    console.log('sanitizedObject', JSON.stringify(sanitizedObject, null, 2));
-    return sanitizedObject;
-  } else {
-    return value;
-  }
 }
 
 export async function POST(req: NextRequest) {
@@ -181,29 +150,105 @@ export async function POST(req: NextRequest) {
         }
       );
 
-      if ("textStream" in result) {
-        // Generate assistant message ID
-        const assistantMessageId = generateUUID();
-        streamingData.appendMessageAnnotation({
-          messageIdFromServer: assistantMessageId,
+      // Generate assistant message ID
+      const assistantMessageId = generateUUID();
+      streamingData.append({
+        type: 'agent-message-id',
+        content: assistantMessageId,
+        timestamp: Date.now()
+      });
+
+      if (result instanceof Response) {
+        // Handle the OpenAI Assistant's streaming response
+        const reader = result.body?.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let partialAssistantContent = '';
+        let done = false;
+
+        while (!done) {
+          const { value, done: streamDone } = await reader.read();
+          done = streamDone;
+
+          if (value) {
+            const chunk = decoder.decode(value, { stream: true });
+
+            // Log the raw chunk for debugging
+            console.log('Received chunk:', chunk);
+
+            // Now, process the chunk
+            // Assuming the chunk is in the format '<type>:<data>\n'
+            const lines = chunk.split('\n');
+            for (const line of lines) {
+              if (line.trim() === '') continue; // Skip empty lines
+              const [prefix, data] = line.split(/:(.*)/s, 2); // Split only at the first ':'
+              const messageType = parseInt(prefix, 10);
+              if (isNaN(messageType)) {
+                console.log('Unknown message type:', prefix);
+                continue;
+              }
+
+              switch (messageType) {
+                case 0: // Assistant's text content
+                  // The data might be a JSON string, e.g., '"text"'
+                  try {
+                    const text = JSON.parse(data);
+                    partialAssistantContent += text;
+                    // Send the text delta to the client
+                    streamingData.append({
+                      type: 'text-delta',
+                      content: {
+                        textDelta: text
+                      },
+                      id: assistantMessageId,
+                      timestamp: Date.now()
+                    });
+                  } catch (err) {
+                    console.error('Error parsing text chunk:', err);
+                  }
+                  break;
+                // Handle other message types if needed
+                case 4:
+                case 5:
+                  // These might be metadata, we can log them
+                  console.log('Received message of type', messageType, 'with data:', data);
+                  break;
+                default:
+                  console.log('Received message of unknown type', messageType, 'with data:', data);
+                  break;
+              }
+            }
+          }
+        }
+
+        streamingData.append({
+          type: 'finish',
+          timestamp: Date.now()
         });
 
-        // Stream back all parts, including their types and content
-        for await (const part of result.fullStream) {
-          // console.log('part', JSON.stringify(part, null, 2));
-
-          // Sanitize the part before appending
-          const sanitizedPart = sanitizeForJSON(part);
-
-          // Append each part dynamically with type, content, id, and timestamp
+      } else if ("textStream" in result) {
+        // Handle PortkeyStreamResponse
+        for await (const chunk of (result as PortkeyStreamResponse).textStream) {
+          // Process each text chunk
           streamingData.append({
-            type: part.type,
-            content: sanitizedPart,
+            type: 'text-delta',
+            content: {
+              textDelta: chunk
+            },
             id: assistantMessageId,
             timestamp: Date.now()
           });
         }
+        streamingData.append({
+          type: 'finish',
+          timestamp: Date.now()
+        });
+      } else {
+        console.log("Unexpected response type");
       }
+
+      // Log that the response was delivered successfully
+      console.log("Response delivered successfully");
+
     } catch (error) {
       console.error('Error processing request:', error);
       streamingData.append({

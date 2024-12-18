@@ -43,6 +43,7 @@ export function useStreamingData({
 
   const processChunk = useCallback(
     (chunk: any) => {
+      // console.log('Received chunk on client:', JSON.stringify(chunk, null, 2));
       const chunkKey = `${chunk.type}-${chunk.timestamp}-${JSON.stringify(chunk.content)}`;
       if (processedChunksRef.current.has(chunkKey)) {
         return;
@@ -182,7 +183,6 @@ export function useStreamingData({
 
     streamingData.forEach(processChunk);
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [streamingData]);
 
   return previousStatusesRef.current;

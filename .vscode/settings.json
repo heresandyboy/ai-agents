@@ -16,5 +16,8 @@
   "eslint.workingDirectories": [{ "mode": "auto" }],
   "eslint.useFlatConfig": true,
   "eslint.format.enable": true,
-  "typescript.tsdk": "node_modules/typescript/lib"
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "[typescript]": {
+    "editor.defaultFormatter": "vscode.typescript-language-features"
+  }
 }
