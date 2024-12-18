@@ -6,8 +6,7 @@ import {
   ToolRegistry,
   type Message,
   type OpenAIAssistantLanguageModelConfig,
-  type PortkeyLanguageModelConfig,
-  type PortkeyStreamResponse,
+  type PortkeyLanguageModelConfig
 } from "@zen/ai-agent-sdk";
 import { type NextRequest } from "next/server";
 
@@ -159,95 +158,74 @@ export async function POST(req: NextRequest) {
       });
 
       if (result instanceof Response) {
-        // Handle the OpenAI Assistant's streaming response
+        // Handle OpenAI Assistant's streaming response
         const reader = result.body?.getReader();
         const decoder = new TextDecoder("utf-8");
-        let partialAssistantContent = '';
-        let done = false;
+        let partialContent = '';
 
-        while (!done) {
-          const { value, done: streamDone } = await reader.read();
-          done = streamDone;
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
 
-          if (value) {
-            const chunk = decoder.decode(value, { stream: true });
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n');
 
-            // Log the raw chunk for debugging
-            console.log('Received chunk:', chunk);
+          for (const line of lines) {
+            if (!line.trim()) continue;
 
-            // Now, process the chunk
-            // Assuming the chunk is in the format '<type>:<data>\n'
-            const lines = chunk.split('\n');
-            for (const line of lines) {
-              if (line.trim() === '') continue; // Skip empty lines
-              const [prefix, data] = line.split(/:(.*)/s, 2); // Split only at the first ':'
-              const messageType = parseInt(prefix, 10);
-              if (isNaN(messageType)) {
-                console.log('Unknown message type:', prefix);
-                continue;
-              }
+            const [type, data] = line.split(/:(.*)/s, 2);
+            const messageType = parseInt(type, 10);
 
-              switch (messageType) {
-                case 0: // Assistant's text content
-                  // The data might be a JSON string, e.g., '"text"'
-                  try {
-                    const text = JSON.parse(data);
-                    partialAssistantContent += text;
-                    // Send the text delta to the client
-                    streamingData.append({
-                      type: 'text-delta',
-                      content: {
-                        textDelta: text
-                      },
-                      id: assistantMessageId,
-                      timestamp: Date.now()
-                    });
-                  } catch (err) {
-                    console.error('Error parsing text chunk:', err);
-                  }
-                  break;
-                // Handle other message types if needed
-                case 4:
-                case 5:
-                  // These might be metadata, we can log them
-                  console.log('Received message of type', messageType, 'with data:', data);
-                  break;
-                default:
-                  console.log('Received message of unknown type', messageType, 'with data:', data);
-                  break;
-              }
+            if (isNaN(messageType)) continue;
+
+            const sanitizedData = sanitizeForJSON(JSON.parse(data));
+
+            switch (messageType) {
+              case 0: // Text content
+                partialContent += sanitizedData;
+                streamingData.append({
+                  type: 'text-delta',
+                  content: { textDelta: sanitizedData },
+                  id: assistantMessageId,
+                  timestamp: Date.now()
+                });
+                break;
+              case 1: // Function calls
+                streamingData.append({
+                  type: 'function-call',
+                  content: sanitizedData,
+                  id: assistantMessageId,
+                  timestamp: Date.now()
+                });
+                break;
+              case 2: // Function results
+                streamingData.append({
+                  type: 'function-result',
+                  content: sanitizedData,
+                  id: assistantMessageId,
+                  timestamp: Date.now()
+                });
+                break;
             }
           }
         }
-
-        streamingData.append({
-          type: 'finish',
-          timestamp: Date.now()
-        });
-
       } else if ("textStream" in result) {
         // Handle PortkeyStreamResponse
-        for await (const chunk of (result as PortkeyStreamResponse).textStream) {
-          // Process each text chunk
+        for await (const part of result.fullStream) {
+          const sanitizedPart = sanitizeForJSON(part);
           streamingData.append({
-            type: 'text-delta',
-            content: {
-              textDelta: chunk
-            },
+            type: part.type,
+            content: sanitizedPart,
             id: assistantMessageId,
             timestamp: Date.now()
           });
         }
-        streamingData.append({
-          type: 'finish',
-          timestamp: Date.now()
-        });
-      } else {
-        console.log("Unexpected response type");
       }
 
-      // Log that the response was delivered successfully
-      console.log("Response delivered successfully");
+      streamingData.append({
+        type: 'finish',
+        timestamp: Date.now()
+      });
 
     } catch (error) {
       console.error('Error processing request:', error);
@@ -260,6 +238,23 @@ export async function POST(req: NextRequest) {
     }
   })();
 
-  // Return the stream immediately
   return new Response(stream);
+}
+
+// Helper function to sanitize JSON data
+function sanitizeForJSON(value: any): any {
+  if (value instanceof Date) {
+    return value.toISOString();
+  } else if (Array.isArray(value)) {
+    return value.map(sanitizeForJSON);
+  } else if (value !== null && typeof value === 'object') {
+    const sanitizedObject: any = {};
+    for (const key in value) {
+      if (Object.prototype.hasOwnProperty.call(value, key)) {
+        sanitizedObject[key] = sanitizeForJSON(value[key]);
+      }
+    }
+    return sanitizedObject;
+  }
+  return value;
 }

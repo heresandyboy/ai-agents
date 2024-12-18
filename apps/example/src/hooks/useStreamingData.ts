@@ -73,6 +73,7 @@ export function useStreamingData({
           break;
 
         case 'tool-call':
+          console.log('tool-call', JSON.stringify(chunk, null, 2));
           if (!currentMessageRef.current.id) {
             currentMessageRef.current.id = chunk.id;
             setMessages(prevMessages => [
@@ -104,6 +105,7 @@ export function useStreamingData({
           break;
 
         case 'tool-result':
+          console.log('tool-result', JSON.stringify(chunk, null, 2));
           const toolIndex = currentMessageRef.current.toolInvocations.findIndex(
             t => t.toolCallId === chunk.content.toolCallId
           );
@@ -166,6 +168,10 @@ export function useStreamingData({
                 : msg
             ));
           }
+          break;
+
+        default:
+          console.log('unknown chunk', JSON.stringify(chunk, null, 2));
           break;
       }
     },
