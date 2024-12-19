@@ -9,10 +9,26 @@ import {
 } from "@zen/ai-agent-sdk";
 import { CalculatorTool, WeatherTool } from "@zen/ai-agent-sdk/tools";
 
+const debug = {
+    log: (message: string, data?: any) => {
+        console.log(`[${new Date().toISOString()}] ${message}`, data || '');
+    },
+    time: (label: string) => {
+        debug.log(`⏱️ Starting: ${label}`);
+        return performance.now();
+    },
+    timeEnd: (label: string, startTime: number) => {
+        const duration = performance.now() - startTime;
+        debug.log(`⏱️ Completed: ${label} (${duration.toFixed(2)}ms)`);
+    }
+};
+
 /**
  * Creates and configures the AgentOrchestrator with necessary agents/tools.
  */
 export function createOrchestrator(): AgentOrchestrator {
+    const startTime = debug.time('createOrchestrator');
+
     const portkeyConfig: PortkeyLanguageModelConfig = {
         llmRouterProvider: "portkey",
         llmProvider: "openai",
@@ -69,5 +85,7 @@ export function createOrchestrator(): AgentOrchestrator {
         calculatorToolRegistry
     );
 
-    return new AgentOrchestrator(classifierAgent, [weatherAgent, mathAssistant]);
+    const orchestrator = new AgentOrchestrator(classifierAgent, [weatherAgent, mathAssistant]);
+    debug.timeEnd('createOrchestrator', startTime);
+    return orchestrator;
 } 
