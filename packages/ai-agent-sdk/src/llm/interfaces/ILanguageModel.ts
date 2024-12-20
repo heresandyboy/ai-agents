@@ -1,13 +1,12 @@
 import {
-  type AssistantResponse,
   type CoreTool,
-  type StreamTextResult,
+  type StreamTextResult
 } from "ai";
 import { type ITool } from "../../tools/interfaces/ITool";
 import {
-  type Message,
   type GenerationOptions,
   type LanguageModelV1FinishReason,
+  type Message,
   type ToolCall,
   type ToolResult,
 } from "../../types/common";
@@ -68,10 +67,10 @@ export type LanguageModelConfig =
 // Map config types to their corresponding stream response types
 export type ConfigToStreamResponse<T extends LanguageModelConfig> =
   T extends PortkeyLanguageModelConfig
-    ? PortkeyStreamResponse
-    : T extends OpenAIAssistantLanguageModelConfig
-    ? AssistantStreamResponse
-    : never;
+  ? PortkeyStreamResponse
+  : T extends OpenAIAssistantLanguageModelConfig
+  ? AssistantStreamResponse
+  : never;
 
 // Make ILanguageModel generic with config type only
 export interface ILanguageModel<
@@ -87,9 +86,9 @@ export interface ILanguageModel<
     options: GenerationOptions & { tools?: ITool[] }
   ): Promise<
     TConfig extends PortkeyLanguageModelConfig
-      ? PortkeyStreamResponse
-      : TConfig extends OpenAIAssistantLanguageModelConfig
-      ? AssistantStreamResponse
-      : never
+    ? PortkeyStreamResponse
+    : TConfig extends OpenAIAssistantLanguageModelConfig
+    ? AssistantStreamResponse
+    : never
   >;
 }

@@ -23,63 +23,78 @@ const debug = {
 };
 
 export async function POST(req: NextRequest): Promise<Response> {
-  const startTime = debug.time('POST request');
+  console.log('Received chat request');
 
-  const { messages, lastMessage } = await parseIncomingMessages(req);
-  debug.timeEnd('Message parsing', startTime);
+  try {
+    const startTime = debug.time('POST request');
 
-  const streamingData = new StreamData();
-  const userMessageId = addUserMessageId(streamingData);
-  notifyStatus(streamingData, "Selecting Agent");
+    const { messages, lastMessage } = await parseIncomingMessages(req);
+    debug.timeEnd('Message parsing', startTime);
 
-  // Create and return the stream immediately
-  const stream = new ReadableStream({
-    async start(controller) {
-      streamingData.stream.pipeTo(
-        new WritableStream({
-          write(chunk) {
-            controller.enqueue(chunk);
+    console.log('Chat request payload:', messages);
+
+    const streamingData = new StreamData();
+    const userMessageId = addUserMessageId(streamingData);
+    notifyStatus(streamingData, "Selecting Agent");
+
+    // Create and return the stream immediately
+    const stream = new ReadableStream({
+      async start(controller) {
+        streamingData.stream.pipeTo(
+          new WritableStream({
+            write(chunk) {
+              controller.enqueue(chunk);
+            },
+          })
+        );
+      },
+    });
+
+    // Process in background without blocking the response
+    (async () => {
+      const processStart = debug.time('Background processing');
+      const orchestrator = createOrchestrator();
+      debug.timeEnd('Orchestrator creation', processStart);
+
+      try {
+        const orchestratorStart = debug.time('Orchestrator processing');
+        const result = await orchestrator.process(lastMessage.content, messages.slice(0, -1), {
+          stream: true,
+          onUpdate: (statusMessage: string) => {
+            notifyStatus(streamingData, statusMessage);
           },
-        })
-      );
-    },
-  });
+        });
+        debug.timeEnd('Orchestrator processing', orchestratorStart);
 
-  // Process in background without blocking the response
-  (async () => {
-    const processStart = debug.time('Background processing');
-    const orchestrator = createOrchestrator();
-    debug.timeEnd('Orchestrator creation', processStart);
+        console.log('Orchestrator response received', { responseType: typeof result });
 
-    try {
-      const orchestratorStart = debug.time('Orchestrator processing');
-      const result = await orchestrator.process(lastMessage.content, messages.slice(0, -1), {
-        stream: true,
-        onUpdate: (statusMessage: string) => {
-          notifyStatus(streamingData, statusMessage);
-        },
-      });
-      debug.timeEnd('Orchestrator processing', orchestratorStart);
+        const agentMessageId = makeAgentMessageId(streamingData);
 
-      const agentMessageId = makeAgentMessageId(streamingData);
+        if (result instanceof Response) {
+          await handleOpenAIResponse(result, agentMessageId, streamingData);
+        } else if ("textStream" in result) {
+          await handlePortkeyResponse(result, agentMessageId, streamingData);
+        }
 
-      if (result instanceof Response) {
-        await handleOpenAIResponse(result, agentMessageId, streamingData);
-      } else if ("textStream" in result) {
-        await handlePortkeyResponse(result, agentMessageId, streamingData);
+        finishStream(streamingData);
+      } catch (error) {
+        console.error('Error in chat route:', error);
+        handleProcessingError(error, streamingData);
+      } finally {
+        // Ensure we always close the stream
+        streamingData.close();
       }
+    })();
 
-      finishStream(streamingData);
-    } catch (error) {
-      handleProcessingError(error, streamingData);
-    } finally {
-      // Ensure we always close the stream
-      streamingData.close();
-    }
-  })();
-
-  debug.log('Initial response sent, background processing started');
-  return new Response(stream);
+    debug.log('Initial response sent, background processing started');
+    return new Response(stream);
+  } catch (error) {
+    console.error('Error in chat route:', error);
+    return new Response(
+      JSON.stringify({ error: 'An error occurred processing your request' }),
+      { status: 500 }
+    );
+  }
 }
 
 async function parseIncomingMessages(
@@ -131,8 +146,18 @@ async function handleOpenAIResponse(
   agentMessageId: string,
   streamingData: StreamData
 ): Promise<void> {
+  console.log('Handling OpenAI response:', {
+    type: typeof response,
+    isResponse: response instanceof Response,
+    hasBody: !!response.body,
+    headers: Object.fromEntries(response.headers.entries())
+  });
+
   const reader = response.body?.getReader();
-  if (!reader) return;
+  if (!reader) {
+    console.error('No reader available in response body');
+    return;
+  }
 
   const decoder = new TextDecoder();
   let partialContent = '';
@@ -140,10 +165,16 @@ async function handleOpenAIResponse(
   try {
     while (true) {
       const { value, done } = await reader.read();
-      if (done) break;
+      if (done) {
+        console.log('Stream reading completed');
+        break;
+      }
 
       const chunk = decoder.decode(value, { stream: true });
+      console.log('Received chunk:', { chunk, length: chunk.length });
+
       const lines = chunk.split('\n');
+      console.log('Split into lines:', { lineCount: lines.length });
 
       for (const line of lines) {
         if (!line.trim()) continue;
@@ -152,10 +183,18 @@ async function handleOpenAIResponse(
         if (!data) continue;
 
         const messageType = parseInt(type, 10);
-        if (isNaN(messageType)) continue;
+        if (isNaN(messageType)) {
+          console.log('Invalid message type:', { type, line });
+          continue;
+        }
 
         try {
           const sanitizedData = sanitizeForJSON(JSON.parse(data));
+          console.log('Processing message:', {
+            type: messageType,
+            dataLength: data.length,
+            sanitizedData
+          });
 
           switch (messageType) {
             case 0: // Text content

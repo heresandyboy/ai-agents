@@ -43,15 +43,20 @@ export function useStreamingData({
 
   const processChunk = useCallback(
     (chunk: any) => {
-      // console.log('Received chunk on client:', JSON.stringify(chunk, null, 2));
+      console.log('Received chunk on client:', JSON.stringify(chunk, null, 2));
       const chunkKey = `${chunk.type}-${chunk.timestamp}-${JSON.stringify(chunk.content)}`;
+
       if (processedChunksRef.current.has(chunkKey)) {
+        console.log('Duplicate chunk detected, skipping', { chunkKey });
         return;
       }
+
+      console.log('Processing new chunk', { type: chunk.type, timestamp: chunk.timestamp });
       processedChunksRef.current.add(chunkKey);
 
       switch (chunk.type) {
         case 'user-message-id':
+          console.log('User message ID received:', chunk.content);
           currentMessageRef.current = {
             content: '',
             toolInvocations: [],
@@ -63,6 +68,7 @@ export function useStreamingData({
           break;
 
         case 'status':
+          console.log('Status update received:', chunk.status);
           if (!currentUserMessageId) return;
           if (!previousStatusesRef.current[currentUserMessageId]) {
             previousStatusesRef.current[currentUserMessageId] = [];
@@ -73,7 +79,7 @@ export function useStreamingData({
           break;
 
         case 'tool-call':
-          console.log('tool-call', JSON.stringify(chunk, null, 2));
+          console.log('Tool call received:', chunk.content);
           if (!currentMessageRef.current.id) {
             currentMessageRef.current.id = chunk.id;
             setMessages(prevMessages => [
@@ -105,7 +111,7 @@ export function useStreamingData({
           break;
 
         case 'tool-result':
-          console.log('tool-result', JSON.stringify(chunk, null, 2));
+          console.log('Tool result received:', chunk.content);
           const toolIndex = currentMessageRef.current.toolInvocations.findIndex(
             t => t.toolCallId === chunk.content.toolCallId
           );
@@ -127,6 +133,7 @@ export function useStreamingData({
           break;
 
         case 'text-delta':
+          console.log('Text delta received:', chunk.content);
           if (!currentMessageRef.current.id) {
             currentMessageRef.current.id = chunk.id;
             currentMessageRef.current.content = chunk.content.textDelta;
@@ -160,6 +167,7 @@ export function useStreamingData({
           break;
 
         case 'finish':
+          console.log('Finish signal received');
           setIsLoading(false);
           if (currentMessageRef.current.id) {
             setMessages(prevMessages => prevMessages.map(msg =>
@@ -171,7 +179,7 @@ export function useStreamingData({
           break;
 
         default:
-          console.log('unknown chunk', JSON.stringify(chunk, null, 2));
+          console.log('Unknown chunk type:', chunk.type);
           break;
       }
     },

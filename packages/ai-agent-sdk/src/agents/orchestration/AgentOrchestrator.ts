@@ -1,3 +1,4 @@
+import debug from "debug";
 import {
   type GenerationResponse,
   type PortkeyStreamResponse,
@@ -8,6 +9,9 @@ import {
   type AgentClassifier,
   type ClassifierResult,
 } from "../classification/AgentClassifier";
+
+debug.enable("*");
+const log = debug("llm:agent-orchestrator)");
 
 export class AgentOrchestrator {
   private agents: Agent<any>[];
@@ -23,6 +27,8 @@ export class AgentOrchestrator {
     conversationHistory: Message[] = [],
     options: GenerationOptions & { onUpdate?: (status: string) => void } = {}
   ): Promise<string | GenerationResponse | PortkeyStreamResponse | Response> {
+    log('Orchestrator processing input', { input, historyLength: conversationHistory.length, options });
+
     // Send a status update: Classifying input
     // options.onUpdate?.('Classifying input');
 
@@ -34,8 +40,10 @@ export class AgentOrchestrator {
         conversationHistory,
         options.onUpdate // Pass the onUpdate callback
       );
+    log('Classification result', classificationResult);
 
     const selectedAgentName = classificationResult.selectedAgent;
+    log('Selected agent', { agentName: selectedAgentName });
 
     // options.onUpdate?.(`${classificationResult.reasoning}`);
     // options.onUpdate?.(`Confidence: ${classificationResult.confidence}`);
@@ -48,6 +56,7 @@ export class AgentOrchestrator {
       (agent) => agent.getName() === selectedAgentName
     );
     if (!selectedAgent) {
+      log('No agent selected, using default response');
       throw new Error(`Agent not found: ${selectedAgentName}`);
     }
 
@@ -61,10 +70,12 @@ export class AgentOrchestrator {
       { role: "user", content: input },
     ];
 
+    log('Processing with selected agent');
     // Process the input with the selected Agent
     const response = await selectedAgent.process(input, {
       stream: options.stream,
     });
+    log('Agent processing completed', { responseType: typeof response });
     console.log("Orchestrator Response", JSON.stringify(response, null, 5));
 
     // Send final status update

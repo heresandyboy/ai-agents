@@ -1,18 +1,18 @@
+import debug from "debug";
 import {
-  type ILanguageModel,
+  type AssistantStreamResponse,
   type GenerationResponse,
+  type ILanguageModel,
   // type StreamingResponse,
   type LanguageModelConfig,
-  type PortkeyLanguageModelConfig,
   type OpenAIAssistantLanguageModelConfig,
+  type PortkeyLanguageModelConfig,
   type PortkeyStreamResponse,
-  type AssistantStreamResponse,
 } from "../../llm/interfaces/ILanguageModel";
 import { type ITool, type IToolRegistry } from "../../tools/interfaces/ITool";
-import { type Message, type GenerationOptions } from "../../types/common";
-import { ResponseHandlerFactory } from "../responses/ResponseHandler";
+import { type GenerationOptions, type Message } from "../../types/common";
 import { AgentError } from "../errors/AgentError";
-import debug from "debug";
+import { ResponseHandlerFactory } from "../responses/ResponseHandler";
 // import { type AssistantResponse, type CoreTool } from "ai";
 // import { type StreamTextResult } from "ai";
 
@@ -62,18 +62,21 @@ export class Agent<TConfig extends LanguageModelConfig> {
     input: string,
     options: GenerationOptions = {}
   ): Promise<string | GenerationResponse | AgentResponseType<TConfig>> {
-    log(`Processing input: "${input}"`);
+    log('Processing agent input', { input, historyLength: this.messageHistory.length, options });
+
     const messages = this.prepareMessages(input);
+    log('Built messages for processing', { messages });
+
     const tools = Array.from(this.toolRegistry.getTools().values());
 
     try {
       const response = options.stream
         ? await this.handleStreamGeneration(messages, tools, options)
         : await this.handleCompleteGeneration(messages, tools, options);
+      log('Processing completed successfully', { responseType: typeof response });
       if (typeof response === "string") {
         this.updateMessageHistory(input, response);
       }
-      log("Processing completed successfully");
       return response;
     } catch (error) {
       log("Error during processing:", error);
@@ -91,6 +94,7 @@ export class Agent<TConfig extends LanguageModelConfig> {
       const response = options.stream
         ? await this.handleStreamGeneration(messages, tools, options)
         : await this.handleCompleteGeneration(messages, tools, options);
+      log('Processing completed successfully', { responseType: typeof response });
       return response;
     } catch (error) {
       throw new AgentError("Processing failed", { cause: error });
@@ -133,12 +137,15 @@ export class Agent<TConfig extends LanguageModelConfig> {
     tools: ITool[],
     options: GenerationOptions
   ): Promise<AgentResponseType<TConfig>> {
-    return await this.languageModel.streamText(messages, {
+    log('Starting stream processing');
+    const response = await this.languageModel.streamText(messages, {
       tools,
       toolChoice: options.toolChoice,
       temperature: options.temperature ?? this.config.temperature,
       maxTokens: options.maxTokens ?? this.config.maxTokens,
     });
+    log('Stream processing completed', { responseType: typeof response });
+    return response;
   }
 
   private updateMessageHistory(
