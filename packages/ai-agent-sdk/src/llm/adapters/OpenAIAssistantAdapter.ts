@@ -283,9 +283,7 @@ export class OpenAIAssistantLanguageModel
                       data: {
                         type: 'text-delta',
                         id: event.data.id,
-                        content: {
-                          textDelta
-                        },
+                        content: textDelta,
                         timestamp
                       }
                     });
@@ -429,9 +427,7 @@ export class OpenAIAssistantLanguageModel
               data: {
                 type: 'text-delta',
                 id: lastMessage.id,
-                content: {
-                  textDelta: text
-                },
+                content: text,
                 timestamp: Date.now()
               }
             });
