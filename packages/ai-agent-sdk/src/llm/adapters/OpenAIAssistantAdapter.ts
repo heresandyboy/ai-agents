@@ -244,210 +244,139 @@ export class OpenAIAssistantLanguageModel
               stream: true,
             }
           );
-          log('Created runStream:', { type: typeof runStream });
 
-          // Forward the stream and handle cleanup
-          const streamPromise = forwardStream(runStream);
-          log('Forwarded stream to client');
+          // Forward the stream immediately
+          forwardStream(runStream);
 
-          runStream.on('event', async (event) => {
-            const timestamp = Date.now();
-            log('Received OpenAI event:', {
-              event: event.event,
-              data: event.data,
-              type: typeof event
-            });
+          const toolResults = new Map<string, any>();
 
-            switch (event.event) {
-              case 'thread.message.created':
-                log('Message created event received', { data: event.data });
+          // Set up proper event handlers for text streaming
+          runStream.on('textCreated', (text) => {
+            log('Text created:', text);
+            const messageId = runStream.currentMessageSnapshot()?.id;
+            if (messageId && text.value) {
+              sendDataMessage({
+                role: 'data',
+                data: JSON.parse(JSON.stringify({
+                  type: 'text-delta',
+                  id: messageId,
+                  content: {
+                    textDelta: text.value
+                  },
+                  timestamp: Date.now()
+                }))
+              });
+            }
+          });
+
+          runStream.on('textDelta', (delta, snapshot) => {
+            log('Text delta received:', { delta, snapshot });
+            const messageId = runStream.currentMessageSnapshot()?.id;
+            if (messageId && delta.value) {
+              sendDataMessage({
+                role: 'data',
+                data: JSON.parse(JSON.stringify({
+                  type: 'text-delta',
+                  id: messageId,
+                  content: {
+                    textDelta: delta.value
+                  },
+                  timestamp: Date.now()
+                }))
+              });
+            }
+          });
+
+          // Tool call handling
+          runStream.on('toolCallCreated', (toolCall) => {
+            log('Tool call created:', toolCall);
+            const stepId = runStream.currentRunStepSnapshot()?.id;
+            if (toolCall.type === 'function' && stepId) {
+              sendDataMessage({
+                role: 'data',
+                data: JSON.parse(JSON.stringify({
+                  type: 'tool-call',
+                  id: stepId,
+                  content: {
+                    toolCallId: toolCall.id,
+                    toolName: toolCall.function.name,
+                    args: toolCall.function.arguments
+                  },
+                  timestamp: Date.now()
+                }))
+              });
+            }
+          });
+
+          runStream.on('toolCallDone', async (toolCall) => {
+            log('Tool call completed:', toolCall);
+            const stepId = runStream.currentRunStepSnapshot()?.id;
+            if (toolCall.type === 'function' && stepId) {
+              try {
+                const tool = this.tools?.find(t => t.getName() === toolCall.function.name);
+                if (!tool) {
+                  throw new ToolError(`Tool ${toolCall.function.name} not found`);
+                }
+
+                const args = JSON.parse(toolCall.function.arguments || '{}');
+                const result = await tool.execute(args);
+                const serializedResult = JSON.parse(JSON.stringify(result));
+                toolResults.set(toolCall.id, serializedResult);
+
                 sendDataMessage({
                   role: 'data',
-                  data: {
-                    type: 'status',
-                    status: 'Processing message...',
-                    timestamp
-                  }
-                });
-                break;
-
-              case 'thread.message.delta':
-                log('Message delta event received', { delta: event.data.delta });
-                const deltaContent = event.data.delta.content?.[0];
-                if (deltaContent && 'type' in deltaContent && deltaContent.type === 'text') {
-                  const textDelta = ('text' in deltaContent && deltaContent.text?.value) || '';
-                  if (textDelta) {
-                    log('Received text delta', { text: textDelta });
-                    sendDataMessage({
-                      role: 'data',
-                      data: {
-                        type: 'text-delta',
-                        id: event.data.id,
-                        content: textDelta,
-                        timestamp
-                      }
-                    });
-                  }
-                }
-                break;
-
-              case 'thread.run.queued':
-                log('Run queued event received');
-                sendDataMessage({
-                  role: 'data',
-                  data: {
-                    type: 'status',
-                    status: 'Assistant initialized...',
-                    timestamp
-                  }
-                });
-                break;
-
-              case 'thread.run.in_progress':
-                log('Run in progress event received', { data: event.data });
-                sendDataMessage({
-                  role: 'data',
-                  data: {
-                    type: 'status',
-                    status: 'Processing request...',
-                    timestamp
-                  }
-                });
-                break;
-
-              case 'thread.run.requires_action':
-                log('Run requires action event received', {
-                  toolCalls: event.data.required_action?.submit_tool_outputs?.tool_calls,
+                  data: JSON.parse(JSON.stringify({
+                    type: 'tool-result',
+                    id: stepId,
+                    content: {
+                      toolCallId: toolCall.id,
+                      toolName: toolCall.function.name,
+                      args,
+                      result: serializedResult
+                    },
+                    timestamp: Date.now()
+                  }))
                 });
 
-                if (!event.data.required_action?.submit_tool_outputs?.tool_calls) {
-                  throw new Error('No tool calls found in required action');
-                }
-
-                const toolResults = new Map<string, any>();
-
-                // Execute each tool call
-                for (const toolCall of event.data.required_action.submit_tool_outputs.tool_calls) {
-                  // Send tool call event
-                  sendDataMessage({
-                    role: 'data',
-                    data: {
-                      type: 'tool-call',
-                      id: event.data.id,
-                      content: {
-                        toolCallId: toolCall.id,
-                        toolName: toolCall.function.name,
-                        args: toolCall.function.arguments
-                      },
-                      timestamp
-                    }
-                  });
-
-                  const tool = this.tools?.find(t => t.getName() === toolCall.function.name);
-                  if (!tool) {
-                    throw new ToolError(`Tool ${toolCall.function.name} not found`);
-                  }
-
-                  try {
-                    const args = JSON.parse(toolCall.function.arguments || '{}');
-                    log('Executing tool', { toolName: toolCall.function.name, args });
-                    const result = await tool.execute(args);
-                    log('Tool execution result', { toolName: toolCall.function.name, result });
-
-                    const serializedResult = JSON.parse(JSON.stringify(result));
-                    log('Serialized result', { toolName: toolCall.function.name, serializedResult });
-                    toolResults.set(toolCall.id, serializedResult);
-
-                    sendDataMessage({
-                      role: 'data',
-                      data: {
-                        type: 'tool-result',
-                        id: event.data.id,
-                        content: {
-                          toolCallId: toolCall.id,
-                          toolName: toolCall.function.name,
-                          args,
-                          result: serializedResult
-                        },
-                        timestamp
-                      }
-                    });
-                  } catch (error) {
-                    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-                    throw new ToolError(`Failed to execute tool ${toolCall.function.name}: ${errorMessage}`);
-                  }
-                }
-
-                // Submit all tool outputs together
-                if (!event.data.required_action?.submit_tool_outputs?.tool_calls) {
-                  throw new Error('No tool calls found when submitting outputs');
-                }
-
-                const toolOutputs = event.data.required_action.submit_tool_outputs.tool_calls.map(
-                  toolCall => ({
-                    tool_call_id: toolCall.id,
-                    output: JSON.stringify(toolResults.get(toolCall.id))
-                  })
-                );
-                log('Submitting tool outputs', { toolOutputs });
+                // Submit the tool outputs
                 await this.client.beta.threads.runs.submitToolOutputs(
                   this.threadId!,
-                  event.data.id,
-                  { tool_outputs: toolOutputs }
+                  runStream.currentRun()!.id,
+                  {
+                    tool_outputs: [{
+                      tool_call_id: toolCall.id,
+                      output: JSON.stringify(serializedResult)
+                    }]
+                  }
                 );
-                log('Tool outputs submitted, waiting for response');
-                break;
-
-              case 'thread.run.completed':
-                log('Run completed event received');
-                // Wait for stream completion
-                await runStream.done();
-                break;
-
-              case 'error':
-                log('Error event received', { error: event.data });
-                // Handle error and abort
-                runStream._emit('error', new Error(`Assistant error: ${event.data.message}`));
-                throw new Error(`Assistant error: ${event.data.message}`);
+              } catch (error: unknown) {
+                const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                throw new ToolError(`Failed to execute tool ${toolCall.function.name}: ${errorMessage}`);
+              }
             }
           });
 
-          // Wait for the stream to complete
-          await streamPromise;
-          log('Stream completed');
-
-          // Get the final message if we haven't received it through deltas
-          const messages = await this.client.beta.threads.messages.list(this.threadId!);
-          const lastMessage = messages.data[0];
-          if (lastMessage?.content?.[0]?.type === 'text' && 'text' in lastMessage.content[0]) {
-            const text = lastMessage.content[0].text.value;
-            log('Sending final text response', { text });
+          // Handle stream completion
+          runStream.on('end', () => {
             sendDataMessage({
               role: 'data',
-              data: {
-                type: 'text-delta',
-                id: lastMessage.id,
-                content: text,
+              data: JSON.parse(JSON.stringify({
+                type: 'finish',
                 timestamp: Date.now()
-              }
+              }))
             });
-          }
-
-          // Send finish event
-          sendDataMessage({
-            role: 'data',
-            data: {
-              type: 'finish',
-              timestamp: Date.now()
-            }
           });
-          log('Sent finish event');
+
+          // Return a Promise that resolves when the stream ends or errors
+          return new Promise<void>((resolve, reject) => {
+            runStream.on('end', resolve);
+            runStream.on('error', reject);
+          });
         }
       );
     } catch (error) {
-      throw new LLMError("Failed to stream from Assistant API", {
-        cause: error,
-      });
+      log('Error in streamText:', error);
+      throw new LLMError(`Failed to stream text: ${error}`);
     }
   }
 }
