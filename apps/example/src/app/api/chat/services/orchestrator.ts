@@ -23,12 +23,20 @@ const debug = {
     }
 };
 
+// Create singleton instances
+let orchestratorInstance: AgentOrchestrator | null = null;
+
 /**
  * Creates and configures the AgentOrchestrator with necessary agents/tools.
  */
 export function createOrchestrator(): AgentOrchestrator {
+    if (orchestratorInstance) {
+        return orchestratorInstance;
+    }
+
     const startTime = debug.time('createOrchestrator');
 
+    // Initialize all configurations and registries
     const portkeyConfig: PortkeyLanguageModelConfig = {
         llmRouterProvider: "portkey",
         llmProvider: "openai",
@@ -50,15 +58,19 @@ export function createOrchestrator(): AgentOrchestrator {
         temperature: 0.1,
     };
 
+    // Create and cache tool registries
     const weatherToolRegistry = new ToolRegistry();
     weatherToolRegistry.register(new WeatherTool());
 
     const calculatorToolRegistry = new ToolRegistry();
     calculatorToolRegistry.register(new CalculatorTool());
 
+    // Create and cache language models
     const portkeyModel = LanguageModelFactory.createGenericLLM(portkeyConfig);
-    const classifierAgent = new AgentClassifier(portkeyModel);
+    const assistantModel = LanguageModelFactory.createOpenAIAssistant(openAIAssistantConfig);
 
+    // Create and cache agents
+    const classifierAgent = new AgentClassifier(portkeyModel);
     const weatherAgent = new Agent(
         {
             name: "weather-agent",
@@ -71,9 +83,6 @@ export function createOrchestrator(): AgentOrchestrator {
         weatherToolRegistry
     );
 
-    const assistantModel =
-        LanguageModelFactory.createOpenAIAssistant(openAIAssistantConfig);
-
     const mathAssistant = new Agent(
         {
             name: "Math Assistant",
@@ -85,7 +94,9 @@ export function createOrchestrator(): AgentOrchestrator {
         calculatorToolRegistry
     );
 
-    const orchestrator = new AgentOrchestrator(classifierAgent, [weatherAgent, mathAssistant]);
+    // Create and cache orchestrator
+    orchestratorInstance = new AgentOrchestrator(classifierAgent, [weatherAgent, mathAssistant]);
+
     debug.timeEnd('createOrchestrator', startTime);
-    return orchestrator;
+    return orchestratorInstance;
 } 

@@ -31,10 +31,52 @@ export async function POST(req: NextRequest): Promise<Response> {
   const streamingData = new StreamData();
   const userMessageId = addUserMessageId(streamingData);
   notifyStatus(streamingData, "Selecting Agent");
-  const stream = createReadableStream(streamingData);
 
-  // Modify processInBackground to return the promise so we can track it
-  processInBackground(messages, lastMessage, streamingData);
+  // Create and return the stream immediately
+  const stream = new ReadableStream({
+    async start(controller) {
+      streamingData.stream.pipeTo(
+        new WritableStream({
+          write(chunk) {
+            controller.enqueue(chunk);
+          },
+        })
+      );
+    },
+  });
+
+  // Process in background without blocking the response
+  (async () => {
+    const processStart = debug.time('Background processing');
+    const orchestrator = createOrchestrator();
+    debug.timeEnd('Orchestrator creation', processStart);
+
+    try {
+      const orchestratorStart = debug.time('Orchestrator processing');
+      const result = await orchestrator.process(lastMessage.content, messages.slice(0, -1), {
+        stream: true,
+        onUpdate: (statusMessage: string) => {
+          notifyStatus(streamingData, statusMessage);
+        },
+      });
+      debug.timeEnd('Orchestrator processing', orchestratorStart);
+
+      const agentMessageId = makeAgentMessageId(streamingData);
+
+      if (result instanceof Response) {
+        await handleOpenAIResponse(result, agentMessageId, streamingData);
+      } else if ("textStream" in result) {
+        await handlePortkeyResponse(result, agentMessageId, streamingData);
+      }
+
+      finishStream(streamingData);
+    } catch (error) {
+      handleProcessingError(error, streamingData);
+    } finally {
+      // Ensure we always close the stream
+      streamingData.close();
+    }
+  })();
 
   debug.log('Initial response sent, background processing started');
   return new Response(stream);
@@ -74,60 +116,6 @@ function notifyStatus(streamingData: StreamData, status: string): void {
   streamingData.append({ type: "status", status, timestamp: Date.now() });
 }
 
-function createReadableStream(streamingData: StreamData): ReadableStream {
-  return new ReadableStream({
-    async start(controller) {
-      await streamingData.stream.pipeTo(
-        new WritableStream({ write: (chunk) => controller.enqueue(chunk) })
-      );
-    },
-  });
-}
-
-function processInBackground(
-  messages: InternalMessage[],
-  lastMessage: InternalMessage,
-  streamingData: StreamData
-): void {
-  (async () => {
-    const processStart = debug.time('Background processing');
-    const orchestrator = createOrchestrator();
-    debug.timeEnd('Orchestrator creation', processStart);
-
-    try {
-      const orchestratorStart = debug.time('Orchestrator processing');
-      const result = await orchestrator.process(lastMessage.content, messages.slice(0, -1), {
-        stream: true,
-        onUpdate: (status: string) => {
-          debug.log(`Status update: ${status}`);
-          notifyStatus(streamingData, status);
-        },
-      });
-      debug.timeEnd('Orchestrator processing', orchestratorStart);
-
-      const agentMessageId = makeAgentMessageId(streamingData);
-
-      const responseStart = debug.time('Response handling');
-      if (result instanceof Response) {
-        debug.log('Processing OpenAI Assistant response');
-        await handleOpenAIResponse(result, agentMessageId, streamingData);
-      } else if ("textStream" in result) {
-        debug.log('Processing Portkey response');
-        await handlePortkeyResponse(result, agentMessageId, streamingData);
-      }
-      debug.timeEnd('Response handling', responseStart);
-
-      finishStream(streamingData);
-    } catch (error) {
-      debug.log('Error in processing', error);
-      handleProcessingError(error, streamingData);
-    } finally {
-      streamingData.close();
-      debug.timeEnd('Total background processing', processStart);
-    }
-  })();
-}
-
 function makeAgentMessageId(streamingData: StreamData): string {
   const id = generateUUID();
   streamingData.append({
@@ -146,47 +134,64 @@ async function handleOpenAIResponse(
   const reader = response.body?.getReader();
   if (!reader) return;
 
-  const decoder = new TextDecoder("utf-8");
-  let buffer = "";
+  const decoder = new TextDecoder();
+  let partialContent = '';
 
-  // Use a more efficient streaming approach
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
 
-    buffer += decoder.decode(value, { stream: true });
+      const chunk = decoder.decode(value, { stream: true });
+      const lines = chunk.split('\n');
 
-    // Process complete messages from buffer
-    const lines = buffer.split("\n");
-    buffer = lines.pop() || ""; // Keep incomplete line in buffer
-
-    // Batch process complete lines
-    if (lines.length > 0) {
       for (const line of lines) {
         if (!line.trim()) continue;
+
         const [type, data] = line.split(/:(.*)/s, 2);
+        if (!data) continue;
+
         const messageType = parseInt(type, 10);
         if (isNaN(messageType)) continue;
 
-        const sanitizedData = sanitizeForJSON(JSON.parse(data));
+        try {
+          const sanitizedData = sanitizeForJSON(JSON.parse(data));
 
-        // Immediate append without accumulating
-        if (messageType === 0) {
-          streamingData.append({
-            type: "text-delta",
-            content: { textDelta: sanitizedData },
-            id: agentMessageId,
-            timestamp: Date.now(),
-          });
+          switch (messageType) {
+            case 0: // Text content
+              partialContent += sanitizedData;
+              streamingData.append({
+                type: 'text-delta',
+                content: { textDelta: sanitizedData },
+                id: agentMessageId,
+                timestamp: Date.now()
+              });
+              break;
+            case 1: // Function calls
+              streamingData.append({
+                type: 'function-call',
+                content: sanitizedData,
+                id: agentMessageId,
+                timestamp: Date.now()
+              });
+              break;
+            case 2: // Function results
+              streamingData.append({
+                type: 'function-result',
+                content: sanitizedData,
+                id: agentMessageId,
+                timestamp: Date.now()
+              });
+              break;
+          }
+        } catch (parseError) {
+          console.error('Error parsing message data:', parseError);
+          continue; // Skip this message but continue processing
         }
-        // ... other cases ...
       }
     }
-  }
-
-  // Process any remaining buffer content
-  if (buffer.trim()) {
-    // Process final buffer content
+  } finally {
+    reader.releaseLock();
   }
 }
 
