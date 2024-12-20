@@ -27,6 +27,7 @@ export class OpenAIAssistantLanguageModel
   private client: OpenAI;
   private threadId: string | null = null;
   private assistant: OpenAI.Beta.Assistants.Assistant | null = null;
+  private tools: ITool[] | undefined;
 
   constructor(private config: OpenAIAssistantLanguageModelConfig) {
     this.client = new OpenAI({
@@ -202,6 +203,7 @@ export class OpenAIAssistantLanguageModel
     options: GenerationOptions & { tools?: ITool[] }
   ): Promise<AssistantStreamResponse> {
     await this.initializeAssistant(options.tools);
+    this.tools = options.tools;
 
     if (!this.config.assistantId) {
       throw new LLMError("Assistant ID is required to stream text");
@@ -258,7 +260,7 @@ export class OpenAIAssistantLanguageModel
 
             switch (event.event) {
               case 'thread.message.created':
-                log('Message created event received');
+                log('Message created event received', { data: event.data });
                 sendDataMessage({
                   role: 'data',
                   data: {
@@ -275,7 +277,7 @@ export class OpenAIAssistantLanguageModel
                 if (deltaContent && 'type' in deltaContent && deltaContent.type === 'text') {
                   const textDelta = ('text' in deltaContent && deltaContent.text?.value) || '';
                   if (textDelta) {
-                    log('Received text-delta', { text: textDelta });
+                    log('Received text delta', { text: textDelta });
                     sendDataMessage({
                       role: 'data',
                       data: {
@@ -304,7 +306,7 @@ export class OpenAIAssistantLanguageModel
                 break;
 
               case 'thread.run.in_progress':
-                log('Run in progress event received');
+                log('Run in progress event received', { data: event.data });
                 sendDataMessage({
                   role: 'data',
                   data: {
@@ -316,18 +318,19 @@ export class OpenAIAssistantLanguageModel
                 break;
 
               case 'thread.run.requires_action':
-                log('Run requires action event received', { toolCalls: event.data.required_action?.submit_tool_outputs?.tool_calls });
+                log('Run requires action event received', {
+                  toolCalls: event.data.required_action?.submit_tool_outputs?.tool_calls,
+                });
+
                 if (!event.data.required_action?.submit_tool_outputs?.tool_calls) {
-                  throw new Error('Invalid tool calls data');
+                  throw new Error('No tool calls found in required action');
                 }
 
                 const toolResults = new Map<string, any>();
 
+                // Execute each tool call
                 for (const toolCall of event.data.required_action.submit_tool_outputs.tool_calls) {
-                  if (toolCall.type !== "function") continue;
-
                   // Send tool call event
-                  log('Tool call event received', { toolCallId: toolCall.id, toolName: toolCall.function.name, args: toolCall.function.arguments });
                   sendDataMessage({
                     role: 'data',
                     data: {
@@ -342,10 +345,7 @@ export class OpenAIAssistantLanguageModel
                     }
                   });
 
-                  const tool = options.tools?.find(
-                    t => t.getName() === toolCall.function.name
-                  );
-
+                  const tool = this.tools?.find(t => t.getName() === toolCall.function.name);
                   if (!tool) {
                     throw new ToolError(`Tool ${toolCall.function.name} not found`);
                   }
@@ -356,12 +356,10 @@ export class OpenAIAssistantLanguageModel
                     const result = await tool.execute(args);
                     log('Tool execution result', { toolName: toolCall.function.name, result });
 
-                    // Ensure the result is JSON-serializable
                     const serializedResult = JSON.parse(JSON.stringify(result));
                     log('Serialized result', { toolName: toolCall.function.name, serializedResult });
                     toolResults.set(toolCall.id, serializedResult);
 
-                    // Send tool result event
                     sendDataMessage({
                       role: 'data',
                       data: {
@@ -376,7 +374,6 @@ export class OpenAIAssistantLanguageModel
                         timestamp
                       }
                     });
-
                   } catch (error) {
                     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
                     throw new ToolError(`Failed to execute tool ${toolCall.function.name}: ${errorMessage}`);
@@ -384,6 +381,10 @@ export class OpenAIAssistantLanguageModel
                 }
 
                 // Submit all tool outputs together
+                if (!event.data.required_action?.submit_tool_outputs?.tool_calls) {
+                  throw new Error('No tool calls found when submitting outputs');
+                }
+
                 const toolOutputs = event.data.required_action.submit_tool_outputs.tool_calls.map(
                   toolCall => ({
                     tool_call_id: toolCall.id,
@@ -396,61 +397,45 @@ export class OpenAIAssistantLanguageModel
                   event.data.id,
                   { tool_outputs: toolOutputs }
                 );
+                log('Tool outputs submitted, waiting for response');
                 break;
 
               case 'thread.run.completed':
                 log('Run completed event received');
-                const messages = await this.client.beta.threads.messages.list(
-                  this.threadId!
-                );
-                const lastMessage = messages.data[0];
-                if (lastMessage?.content?.[0]?.type === 'text' && 'text' in lastMessage.content[0]) {
-                  const text = lastMessage.content[0].text.value;
-                  log('Sending final text response', { text });
-                  sendDataMessage({
-                    role: 'data',
-                    data: {
-                      type: 'text-delta',
-                      id: lastMessage.id,
-                      content: {
-                        textDelta: text
-                      },
-                      timestamp
-                    }
-                  });
-                }
+                // Wait for stream completion
+                await runStream.done();
                 break;
 
-              case 'thread.run.failed':
-                log('Run failed event received', { error: event.data.last_error?.message });
-                const errorMessage = event.data.last_error?.message || 'Run failed';
-                sendDataMessage({
-                  role: 'data',
-                  data: {
-                    type: 'error',
-                    error: errorMessage,
-                    timestamp
-                  }
-                });
-                break;
+              case 'error':
+                log('Error event received', { error: event.data });
+                // Handle error and abort
+                runStream._emit('error', new Error(`Assistant error: ${event.data.message}`));
+                throw new Error(`Assistant error: ${event.data.message}`);
             }
-          });
-
-          runStream.on('error', (error: Error) => {
-            log('Error occurred while streaming', { error: error.message });
-            sendDataMessage({
-              role: 'data',
-              data: {
-                type: 'error',
-                error: error.message,
-                timestamp: Date.now()
-              }
-            });
           });
 
           // Wait for the stream to complete
           await streamPromise;
           log('Stream completed');
+
+          // Get the final message if we haven't received it through deltas
+          const messages = await this.client.beta.threads.messages.list(this.threadId!);
+          const lastMessage = messages.data[0];
+          if (lastMessage?.content?.[0]?.type === 'text' && 'text' in lastMessage.content[0]) {
+            const text = lastMessage.content[0].text.value;
+            log('Sending final text response', { text });
+            sendDataMessage({
+              role: 'data',
+              data: {
+                type: 'text-delta',
+                id: lastMessage.id,
+                content: {
+                  textDelta: text
+                },
+                timestamp: Date.now()
+              }
+            });
+          }
 
           // Send finish event
           sendDataMessage({
