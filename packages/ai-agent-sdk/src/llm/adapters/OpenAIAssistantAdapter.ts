@@ -269,6 +269,28 @@ export class OpenAIAssistantLanguageModel
                 });
                 break;
 
+              case 'thread.message.delta':
+                log('Message delta event received', { delta: event.data.delta });
+                const deltaContent = event.data.delta.content?.[0];
+                if (deltaContent && 'type' in deltaContent && deltaContent.type === 'text') {
+                  const textDelta = ('text' in deltaContent && deltaContent.text?.value) || '';
+                  if (textDelta) {
+                    log('Received text-delta', { text: textDelta });
+                    sendDataMessage({
+                      role: 'data',
+                      data: {
+                        type: 'text-delta',
+                        id: event.data.id,
+                        content: {
+                          textDelta
+                        },
+                        timestamp
+                      }
+                    });
+                  }
+                }
+                break;
+
               case 'thread.run.queued':
                 log('Run queued event received');
                 sendDataMessage({
@@ -381,17 +403,17 @@ export class OpenAIAssistantLanguageModel
                 const messages = await this.client.beta.threads.messages.list(
                   this.threadId!
                 );
-                const lastResponseMessage = messages.data[0];
-
-                if (lastResponseMessage?.content?.[0]?.type === 'text') {
-                  log('Received text response', { text: lastResponseMessage.content[0].text.value });
+                const lastMessage = messages.data[0];
+                if (lastMessage?.content?.[0]?.type === 'text' && 'text' in lastMessage.content[0]) {
+                  const text = lastMessage.content[0].text.value;
+                  log('Sending final text response', { text });
                   sendDataMessage({
                     role: 'data',
                     data: {
                       type: 'text-delta',
-                      id: event.data.id,
+                      id: lastMessage.id,
                       content: {
-                        textDelta: lastResponseMessage.content[0].text.value
+                        textDelta: text
                       },
                       timestamp
                     }

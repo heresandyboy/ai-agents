@@ -196,36 +196,59 @@ async function handleOpenAIResponse(
             sanitizedData
           });
 
+          // Handle different message types
           switch (messageType) {
-            case 0: // Text content
-              partialContent += sanitizedData;
+            case 5: // Assistant metadata
               streamingData.append({
-                type: 'text-delta',
-                content: { textDelta: sanitizedData },
+                type: 'assistant-control',
                 id: agentMessageId,
+                content: sanitizedData,
                 timestamp: Date.now()
               });
               break;
-            case 1: // Function calls
-              streamingData.append({
-                type: 'function-call',
-                content: sanitizedData,
-                id: agentMessageId,
-                timestamp: Date.now()
-              });
-              break;
-            case 2: // Function results
-              streamingData.append({
-                type: 'function-result',
-                content: sanitizedData,
-                id: agentMessageId,
-                timestamp: Date.now()
-              });
+            case 6: // Assistant data messages
+              if (sanitizedData.role === 'data') {
+                const { type, content } = sanitizedData.data;
+                switch (type) {
+                  case 'status':
+                    streamingData.append({
+                      type: 'status',
+                      id: agentMessageId,
+                      content: { status: sanitizedData.data.status },
+                      timestamp: sanitizedData.data.timestamp
+                    });
+                    break;
+                  case 'tool-call':
+                    streamingData.append({
+                      type: 'tool-call',
+                      id: agentMessageId,
+                      content: content,
+                      timestamp: sanitizedData.data.timestamp
+                    });
+                    break;
+                  case 'tool-result':
+                    streamingData.append({
+                      type: 'tool-result',
+                      id: agentMessageId,
+                      content: content,
+                      timestamp: sanitizedData.data.timestamp
+                    });
+                    break;
+                  case 'text-delta':
+                    streamingData.append({
+                      type: 'text-delta',
+                      id: agentMessageId,
+                      content: { textDelta: content },
+                      timestamp: sanitizedData.data.timestamp
+                    });
+                    break;
+                }
+              }
               break;
           }
         } catch (parseError) {
           console.error('Error parsing message data:', parseError);
-          continue; // Skip this message but continue processing
+          continue;
         }
       }
     }
